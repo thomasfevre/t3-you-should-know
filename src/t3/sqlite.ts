@@ -30,7 +30,9 @@ export interface Resolution {
 
 const TERMINAL = ["completed", "failed", "interrupted", "cancelled"];
 
-export const SUBAGENT_THREAD_PREFIX = "thread:provider:";
+/** Child threads T3 creates for subagents and delegated tasks; the user never opens them directly. */
+export const CHILD_THREAD_PREFIXES = ["thread:provider:", "thread:delegated-task:"];
+export const isChildThread = (id: string): boolean => CHILD_THREAD_PREFIXES.some((p) => id.startsWith(p));
 
 export class T3Sqlite {
   private db: DatabaseSync;
@@ -68,7 +70,7 @@ export class T3Sqlite {
       )
       .all() as any[];
     return rows
-      .filter((r) => this.includeSubagents || !r.thread_id.startsWith(SUBAGENT_THREAD_PREFIX))
+      .filter((r) => this.includeSubagents || !isChildThread(r.thread_id))
       .slice(0, limit)
       .map((r) => ({ threadId: r.thread_id, title: r.title, updatedAt: r.updated_at, archived: false }));
   }
@@ -85,7 +87,7 @@ export class T3Sqlite {
       )
       .all(sinceIso, ...TERMINAL) as any[];
     return rows
-      .filter((r) => this.includeSubagents || !r.thread_id.startsWith(SUBAGENT_THREAD_PREFIX))
+      .filter((r) => this.includeSubagents || !isChildThread(r.thread_id))
       .map((r) => ({
         runId: r.run_id,
         threadId: r.thread_id,

@@ -19,7 +19,7 @@ export interface Config {
   minNewItems: number;
   /** At most one note per thread per this many minutes. */
   minMinutesBetweenNotes: number;
-  /** Analyse subagent child threads too (ids starting "thread:provider:"). Off by default. */
+  /** Analyse subagent child threads too (ids starting "thread:provider:" or "thread:delegated-task:"). Off by default. */
   includeSubagentThreads: boolean;
   language?: string;
   statePath: string;
