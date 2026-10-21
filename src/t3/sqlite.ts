@@ -27,10 +27,15 @@ export interface Resolution {
 
 const TERMINAL = ["completed", "failed", "interrupted", "cancelled"];
 
+export const SUBAGENT_THREAD_PREFIX = "thread:provider:";
+
 export class T3Sqlite {
   private db: DatabaseSync;
 
-  constructor(userdataDir: string) {
+  private includeSubagents: boolean;
+
+  constructor(userdataDir: string, includeSubagentThreads = false) {
+    this.includeSubagents = includeSubagentThreads;
     // readOnly: the file is opened with SQLITE_OPEN_READONLY, WAL readers still see committed data.
     this.db = new DatabaseSync(join(userdataDir, "statev2.sqlite"), { readOnly: true });
     this.db.exec("PRAGMA busy_timeout = 2000");
@@ -56,10 +61,13 @@ export class T3Sqlite {
       .prepare(
         `SELECT thread_id, title, updated_at FROM orchestration_v2_projection_threads
          WHERE archived_at IS NULL AND deleted_at IS NULL
-         ORDER BY updated_at DESC LIMIT ?`,
+         ORDER BY updated_at DESC`,
       )
-      .all(limit) as any[];
-    return rows.map((r) => ({ threadId: r.thread_id, title: r.title, updatedAt: r.updated_at, archived: false }));
+      .all() as any[];
+    return rows
+      .filter((r) => this.includeSubagents || !r.thread_id.startsWith(SUBAGENT_THREAD_PREFIX))
+      .slice(0, limit)
+      .map((r) => ({ threadId: r.thread_id, title: r.title, updatedAt: r.updated_at, archived: false }));
   }
 
   /** Root runs that reached a terminal status after `sinceIso`, oldest first. */
@@ -73,13 +81,15 @@ export class T3Sqlite {
          ORDER BY completed_at ASC`,
       )
       .all(sinceIso, ...TERMINAL) as any[];
-    return rows.map((r) => ({
-      runId: r.run_id,
-      threadId: r.thread_id,
-      ordinal: r.ordinal,
-      status: r.status,
-      completedAt: r.completed_at,
-    }));
+    return rows
+      .filter((r) => this.includeSubagents || !r.thread_id.startsWith(SUBAGENT_THREAD_PREFIX))
+      .map((r) => ({
+        runId: r.run_id,
+        threadId: r.thread_id,
+        ordinal: r.ordinal,
+        status: r.status,
+        completedAt: r.completed_at,
+      }));
   }
 
   /** Items of a thread, oldest first. `ordinal` is global to the thread (run ordinal * 1e6 + n). */

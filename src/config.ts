@@ -19,6 +19,8 @@ export interface Config {
   minNewItems: number;
   /** At most one note per thread per this many minutes. */
   minMinutesBetweenNotes: number;
+  /** Analyse subagent child threads too (ids starting "thread:provider:"). Off by default. */
+  includeSubagentThreads: boolean;
   language?: string;
   statePath: string;
 }
@@ -36,6 +38,7 @@ export function defaults(): Config {
     pollIntervalMs: 3000,
     minNewItems: 4,
     minMinutesBetweenNotes: 10,
+    includeSubagentThreads: false,
     statePath: join(homedir(), ".local", "state", "t3-you-should-know", "state.json"),
   };
 }

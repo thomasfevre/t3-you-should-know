@@ -30,7 +30,7 @@ async function main() {
     process.exit(cmd ? 1 : 0);
   }
 
-  const db = new T3Sqlite(cfg.userdataDir);
+  const db = new T3Sqlite(cfg.userdataDir, cfg.includeSubagentThreads);
   const store = new StateStore(cfg.statePath);
   const backend = makeBackend(cfg);
 
@@ -64,7 +64,7 @@ function status(cfg: ReturnType<typeof loadConfig>) {
   for (const [id, t] of Object.entries(store.state.threads)) {
     console.log(`  ${id}: misses=${t.consecutiveMisses} skip=${t.skipRemaining} open=${t.open.length} recent=${t.recent.length}`);
   }
-  const db = new T3Sqlite(cfg.userdataDir);
+  const db = new T3Sqlite(cfg.userdataDir, cfg.includeSubagentThreads);
   console.log("recent threads:");
   for (const t of db.recentThreads(5)) console.log(`  ${t.threadId}  ${t.title}`);
 }
