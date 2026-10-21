@@ -5,9 +5,14 @@ import { MacosSink } from "./macos.ts";
 import { StdoutSink } from "./stdout.ts";
 import { T3Sink } from "./t3.ts";
 
+export interface DeliverResult {
+  delivered: boolean;
+  /** Id returned by T3 (`t3_thread_notify`), used to match the resolution later. */
+  notificationId?: string;
+}
+
 export interface Sink {
-  /** Returns true when the note was delivered somewhere. */
-  deliver(threadId: string, threadTitle: string, note: Note): Promise<boolean>;
+  deliver(threadId: string, threadTitle: string, note: Note): Promise<DeliverResult>;
 }
 
 export function makeSink(cfg: Config, name = cfg.sink): Sink {

@@ -44,7 +44,7 @@ The `claude-cli` backend runs `claude -p` with no tools, no settings, no session
 
 - **Reading** (default): the local SQLite database `~/.t3/userdata/statev2.sqlite`, opened read-only. A run that reaches `completed` in `orchestration_v2_projection_runs` triggers an analysis; the transcript comes from `orchestration_v2_projection_turn_items`. Nothing is ever written to T3's data.
 - **Posting**: the `t3` sink calls the MCP tool `t3_thread_notify` on `<origin>/mcp` (origin from `server-runtime.json`). The endpoint needs a bearer token: `t3 auth session issue --scope orchestration:read --scope orchestration:operate --ttl 30d --token-only`, then put it in `t3Token`. Issuing a session writes to T3's own auth store, which is why this tool does not do it for you.
-- **Feedback**: notes resolved as `acknowledged` ("Got it") are added to the avoid list; the daemon reads them back from the thread.
+- **Feedback**: notes resolved as `acknowledged` ("Got it") are added to the avoid list; the daemon reads them back from the thread, matching by the `notificationId` returned by `t3_thread_notify` (summary text only as a fallback).
 - `src/t3/ws.ts` (WebSocket RPC reader) is a documented stub; the sqlite poller makes it unnecessary.
 
 ## Status of the T3 patch dependency

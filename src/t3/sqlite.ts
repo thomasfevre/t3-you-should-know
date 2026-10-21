@@ -19,7 +19,10 @@ export interface RunRow {
 }
 
 export interface Resolution {
+  /** `turn_item_id` of the notification row. */
   itemId: string;
+  /** `id` field inside the payload, in case T3 uses a different id for the tool result. */
+  payloadId?: string;
   threadId: string;
   summary: string;
   resolution: string;
@@ -123,7 +126,7 @@ export class T3Sqlite {
     for (const r of rows) {
       const p = JSON.parse(r.payload_json);
       if (p?.source?.kind === "external" && p.resolution) {
-        out.push({ itemId: r.turn_item_id, threadId: r.thread_id, summary: p.summary, resolution: p.resolution });
+        out.push({ itemId: r.turn_item_id, payloadId: p.id, threadId: r.thread_id, summary: p.summary, resolution: p.resolution });
       }
     }
     return out;

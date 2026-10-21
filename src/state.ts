@@ -1,6 +1,12 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+export interface OpenNote {
+  learn: string;
+  /** Id returned by `t3_thread_notify`, when known. Preferred for matching. */
+  notificationId?: string;
+}
+
 export interface ThreadState {
   /** Last "learn:" lines offered on this thread, newest last, max 10. */
   recent: string[];
@@ -8,8 +14,8 @@ export interface ThreadState {
   /** Turns still to skip before asking again (backoff). */
   skipRemaining: number;
   lastNoteAt?: string;
-  /** Learn lines posted and not yet resolved by the user. */
-  open: string[];
+  /** Notes posted and not yet resolved by the user. */
+  open: OpenNote[];
   /** Highest item ordinal already analysed on this thread. */
   lastOrdinal: number;
 }
@@ -56,21 +62,21 @@ export class StateStore {
     return (this.state.threads[id] ??= emptyThread());
   }
 
-  addRecent(id: string, learn: string, at: string) {
+  addRecent(id: string, learn: string, at: string, notificationId?: string) {
     const t = this.thread(id);
     t.recent = [...t.recent, learn].slice(-MAX_RECENT);
-    t.open = [...t.open, learn];
+    t.open = [...t.open, { learn, notificationId }];
     t.lastNoteAt = at;
     t.consecutiveMisses = 0;
     t.skipRemaining = 0;
   }
 
   /** `acknowledged` feeds the avoid lists; other resolutions only close the note. */
-  resolve(id: string, learn: string, resolution: "acknowledged" | "dismissed" | "asked") {
+  resolve(id: string, note: OpenNote, resolution: "acknowledged" | "dismissed" | "asked") {
     const t = this.thread(id);
-    t.open = t.open.filter((l) => l !== learn);
-    if (resolution === "acknowledged" && !this.state.seen.includes(learn)) {
-      this.state.seen = [...this.state.seen, learn].slice(-MAX_SEEN);
+    t.open = t.open.filter((n) => n !== note);
+    if (resolution === "acknowledged" && !this.state.seen.includes(note.learn)) {
+      this.state.seen = [...this.state.seen, note.learn].slice(-MAX_SEEN);
     }
   }
 
@@ -80,4 +86,17 @@ export class StateStore {
     writeFileSync(tmp, JSON.stringify(this.state, null, 2));
     renameSync(tmp, this.path);
   }
+}
+
+/**
+ * Find the open note a resolution row refers to. The notification id wins; the learn text is only
+ * a fallback for notes posted without an id (or when T3 returned an id we cannot see in the rows).
+ */
+export function matchOpenNote(
+  open: OpenNote[],
+  row: { itemId: string; payloadId?: string; summary: string },
+): OpenNote | undefined {
+  const byId = open.find((n) => n.notificationId && (n.notificationId === row.itemId || n.notificationId === row.payloadId));
+  if (byId) return byId;
+  return open.find((n) => !n.notificationId && n.learn === row.summary);
 }

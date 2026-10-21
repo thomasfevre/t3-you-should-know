@@ -4,7 +4,7 @@ import type { Config } from "./config.ts";
 import { parseOutput, type ParseResult } from "./parser.ts";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt.ts";
 import type { Sink } from "./sinks/index.ts";
-import type { StateStore } from "./state.ts";
+import { matchOpenNote, type StateStore } from "./state.ts";
 import type { T3Sqlite } from "./t3/sqlite.ts";
 import { buildTranscript, renderItem, type RawItem } from "./transcript.ts";
 
@@ -142,9 +142,9 @@ export class Daemon {
     this.log(`${threadId}: model answered in ${a.ms} ms (${a.parsed.kind})`);
 
     if (a.parsed.kind === "note") {
-      const delivered = await this.sink.deliver(threadId, thread.title, a.parsed.note);
-      if (delivered) {
-        this.store.addRecent(threadId, a.parsed.note.learn, this.now().toISOString());
+      const res = await this.sink.deliver(threadId, thread.title, a.parsed.note);
+      if (res.delivered) {
+        this.store.addRecent(threadId, a.parsed.note.learn, this.now().toISOString(), res.notificationId);
         return;
       }
     }
@@ -158,8 +158,9 @@ export class Daemon {
     for (const [threadId, ts] of Object.entries(this.store.state.threads)) {
       if (ts.open.length === 0) continue;
       for (const r of this.db.resolutions(threadId)) {
-        if (ts.open.includes(r.summary)) {
-          this.store.resolve(threadId, r.summary, r.resolution as "acknowledged" | "dismissed" | "asked");
+        const note = matchOpenNote(ts.open, r);
+        if (note) {
+          this.store.resolve(threadId, note, r.resolution as "acknowledged" | "dismissed" | "asked");
           this.log(`${threadId}: note resolved as ${r.resolution}`);
         }
       }
