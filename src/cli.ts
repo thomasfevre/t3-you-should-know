@@ -44,8 +44,10 @@ async function main() {
     if (!thread) throw new Error(`thread not found: ${values.thread}`);
     const a = await analyze(db, backend, cfg, store, values.thread);
     console.error(`transcript: ${a.transcript.length} chars, model call ${a.ms} ms`);
-    if (a.parsed.kind === "note") await sink.deliver(values.thread, thread.title, a.parsed.note);
-    else console.log(a.parsed.kind === "none" ? "learn: none" : `invalid output (${a.parsed.reason}):\n${a.raw}`);
+    if (a.parsed.kind === "note") {
+      const r = await sink.deliver(values.thread, thread.title, a.parsed.note);
+      console.error(r.delivered ? `delivered${r.notificationId ? ` (${r.notificationId})` : ""}` : "not delivered");
+    } else console.log(a.parsed.kind === "none" ? "learn: none" : `invalid output (${a.parsed.reason}):\n${a.raw}`);
     // `once` is a dry run: it never touches the state file.
     return;
   }

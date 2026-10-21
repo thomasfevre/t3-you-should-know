@@ -56,3 +56,11 @@ The `claude-cli` backend runs `claude -p` with no tools, no settings, no session
 ```sh
 npm test && npm run typecheck
 ```
+
+## What it looks like
+
+The note sits above the composer of the thread it concerns. Click the line to read the explanation.
+
+![Strip above the composer](docs/img/strip.png)
+
+![Expanded note](docs/img/expanded.png)
