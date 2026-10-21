@@ -30,6 +30,8 @@ Thread ids are in `orchestration_v2_projection_threads` of `~/.t3/userdata/state
 | --- | --- |
 | `backend` | `claude-cli` (also `anthropic`, `openrouter`) |
 | `model` | `claude-haiku-5-5` |
+| `userdataDir` | `~/.t3/userdata` (CLI: `--userdata <dir>`, e.g. a dev T3 home) |
+| `includeSubagentThreads` | `false` |
 | `sink` | `t3` (also `macos`, `stdout`) |
 | `transcriptBudgetTokens` | `12000` |
 | `minNewItems` / `minMinutesBetweenNotes` | `4` / `10` |

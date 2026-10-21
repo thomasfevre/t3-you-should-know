@@ -7,10 +7,10 @@ import { StateStore } from "./state.ts";
 import { readRuntime } from "./t3/runtime.ts";
 import { T3Sqlite } from "./t3/sqlite.ts";
 
-const USAGE = `t3-ysk run                                  watch T3 and post notes (foreground)
-t3-ysk once --thread <id> [--sink stdout|macos|t3] [--no-state]
+const USAGE = `t3-ysk run [--userdata <dir>]                  watch T3 and post notes (foreground)
+t3-ysk once --thread <id> [--sink stdout|macos|t3] [--userdata <dir>]
                                             analyse one thread now and print the model output
-t3-ysk status                               show state, T3 server and recent threads`;
+t3-ysk status [--userdata <dir>]               show state, T3 server and recent threads`;
 
 async function main() {
   const { positionals, values } = parseArgs({
@@ -18,11 +18,14 @@ async function main() {
     options: {
       thread: { type: "string" },
       sink: { type: "string" },
+      userdata: { type: "string" },
       "no-state": { type: "boolean" },
     },
   });
   const cmd = positionals[0];
   const cfg = loadConfig();
+  // --userdata points at another T3 home, e.g. a dev instance. Runtime file and sqlite both follow it.
+  if (values.userdata) cfg.userdataDir = values.userdata;
 
   if (cmd === "status") return status(cfg);
   if (cmd !== "run" && cmd !== "once") {
