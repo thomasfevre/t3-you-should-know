@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 import { makeBackend } from "./backends/index.ts";
 import { loadConfig } from "./config.ts";
@@ -9,7 +10,7 @@ import { T3Sqlite } from "./t3/sqlite.ts";
 
 const USAGE = `t3-ysk run [--userdata <dir>]                  watch T3 and post notes (foreground)
 t3-ysk once --thread <id> [--sink stdout|macos|t3] [--userdata <dir>]
-                                            analyse one thread now and print the model output
+                                            analyse one thread now; prints the note, or posts it with --sink t3
 t3-ysk status [--userdata <dir>]               show state, T3 server and recent threads`;
 
 async function main() {
@@ -45,10 +46,10 @@ async function main() {
     const a = await analyze(db, backend, cfg, store, values.thread);
     console.error(`transcript: ${a.transcript.length} chars, model call ${a.ms} ms`);
     if (a.parsed.kind === "note") {
-      const r = await sink.deliver(values.thread, thread.title, a.parsed.note);
+      const r = await sink.deliver(values.thread, thread.title, a.parsed.note, randomUUID());
       console.error(r.delivered ? `delivered${r.notificationId ? ` (${r.notificationId})` : ""}` : "not delivered");
     } else console.log(a.parsed.kind === "none" ? "learn: none" : `invalid output (${a.parsed.reason}):\n${a.raw}`);
-    // `once` is a dry run: it never touches the state file.
+    // `once` never touches the state file; with --sink t3 it does post on the thread.
     return;
   }
 

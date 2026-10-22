@@ -20,10 +20,20 @@ export interface ThreadState {
   lastOrdinal: number;
 }
 
+/** A completed turn still to analyse. Kept until it succeeds or runs out of attempts. */
+export interface PendingTurn {
+  completedAt: string;
+  attempts: number;
+  /** Fixed per pending turn, so a retried delivery is a no-op on the T3 side. */
+  clientRequestId: string;
+}
+
 export interface State {
   version: 1;
-  /** completed_at watermark for the run poller (ISO string). */
+  /** completed_at watermark for the run poller (ISO string). Only drives discovery. */
   lastSeenRunAt?: string;
+  /** Turns discovered but not yet analysed, by thread id. */
+  pending: Record<string, PendingTurn>;
   threads: Record<string, ThreadState>;
   /** Learn lines the user marked "Got it", global across threads. */
   seen: string[];
@@ -33,7 +43,7 @@ export const MAX_RECENT = 10;
 export const MAX_SEEN = 50;
 
 export function emptyState(): State {
-  return { version: 1, threads: {}, seen: [] };
+  return { version: 1, pending: {}, threads: {}, seen: [] };
 }
 
 export function emptyThread(): ThreadState {

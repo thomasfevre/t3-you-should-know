@@ -1,4 +1,12 @@
-# Let outside agents post a notice on a thread
+# Upstream Ideas post
+
+Publish only the "Post" section below, as a new discussion in pingdotgg/t3code > Ideas. The internal notes stay here.
+
+## Title
+
+Let outside agents post a notice on a thread
+
+## Post
 
 Outside agents connected over MCP can read and message threads. They cannot leave a notice that does not interrupt the agent.
 
@@ -17,15 +25,20 @@ Three generic consumers:
 - A reviewer agent leaves findings on a thread it did not start.
 - A watchdog like Claude Code's built-in "You should know" explains something the user likely missed, then learns whether it landed.
 
-This differs from #21240, which wakes the agent, and from #19500, which is a push sent by the agent itself.
+This differs from #21240 and #18104, where the message still reaches the agent (now or on its next run), and from #19500, which is a push sent by the agent itself.
 
 We have a working patch and a demo. Per CONTRIBUTING.md, we would like maintainer approval of the direction and scope before opening a PR.
+
+---
+
+# Internal notes (do not publish)
 
 ## Duplicates checked
 
 Searched Ideas discussions for notification, outside agent, external, banner, MCP and notice, plus issues for "notification". No exact duplicate. Closest:
 
 - [#21240](https://github.com/pingdotgg/t3code/discussions/21240) Automation messages: an outside relay wakes the agent, rendered as a folded notification. Ours never wakes the agent and adds a resolution that flows back to the outside agent. Same notification item, different intent. Worth cross-linking.
+- [#18104](https://github.com/pingdotgg/t3code/discussions/18104) Let an agent send a thread a message without starting a run: a message held for the agent's next run. Ours is for the human, never delivered to the agent unless they ask. Linked from #21240.
 - [#19500](https://github.com/pingdotgg/t3code/discussions/19500) `notify_user` MCP tool: the in-thread agent sends a push. Ours is for outside agents and is an in-app strip with feedback, not a push.
 - [#19534](https://github.com/pingdotgg/t3code/discussions/19534) MCP Events: outside agents learn about thread events. Opposite direction. Ours is outside agent to thread. Complementary.
 - [#14072](https://github.com/pingdotgg/t3code/discussions/14072) Let a tool mark a thread as waiting: changes thread status, not a user-facing notice.

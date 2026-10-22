@@ -35,4 +35,11 @@ describe("parseOutput", () => {
     expect(parseOutput("learn: x.\ntag: Heads up\nno bold title\nbody").kind).toBe("invalid");
     expect(parseOutput("learn: x.\ntag: Heads up\n**T**\n").kind).toBe("invalid");
   });
+
+  it("rejects output longer than the T3 tool accepts", () => {
+    const long = "x".repeat(600);
+    expect(parseOutput(`learn: ${long}\ntag: Heads up\n**T**\nbody`)).toMatchObject({ kind: "invalid", reason: "learn line too long" });
+    expect(parseOutput(`learn: L.\ntag: Heads up\n**${"t".repeat(201)}**\nbody`)).toMatchObject({ kind: "invalid", reason: "title too long" });
+    expect(parseOutput(`learn: L.\ntag: Heads up\n**T**\n${"b".repeat(20_001)}`)).toMatchObject({ kind: "invalid", reason: "explanation too long" });
+  });
 });

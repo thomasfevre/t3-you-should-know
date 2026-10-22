@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { Note } from "../parser.ts";
 import { T3Mcp } from "../t3/mcp.ts";
 import type { DeliverResult, Sink } from "./index.ts";
@@ -14,7 +13,7 @@ export class T3Sink implements Sink {
     this.mcp = new T3Mcp(origin, token);
   }
 
-  async deliver(threadId: string, _title: string, note: Note): Promise<DeliverResult> {
+  async deliver(threadId: string, _title: string, note: Note, clientRequestId: string): Promise<DeliverResult> {
     const res = await this.mcp.notify({
       threadId,
       summary: note.learn,
@@ -22,7 +21,7 @@ export class T3Sink implements Sink {
       body: note.body,
       tag: note.tag,
       agent: AGENT_NAME,
-      clientRequestId: randomUUID(),
+      clientRequestId,
     });
     if (res.ok) return { delivered: true, notificationId: res.notificationId };
     // Log each failure kind once so a missing tool does not flood the log.

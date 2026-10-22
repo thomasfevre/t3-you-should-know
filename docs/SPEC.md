@@ -39,10 +39,10 @@ Mechanism:
 
 T3 already has a `notification` turn item (`{source:{kind}, outcome, summary, detail?}`) rendered in the timeline, but only the server may create one (`message.dispatch` guard: "Notifications must be server- or provider-created queued messages"). Extend, minimally:
 
-A. **Contracts** (`packages/contracts`): `notification.source.kind` gains `"external"` with `source.agent: string` (display name of the outside agent, e.g. "You should know"). Add optional fields on the notification item: `title?: string`, `body?: string` (markdown), `tag?: string`, `resolution?: "acknowledged" | "dismissed" | "asked"` (null while open).
+A. **Contracts** (`packages/contracts`): `notification.source.kind` gains `"external"` with `source.agent: string` (display name of the outside agent, e.g. "You should know"). Add optional fields on the notification item: `title?: string`, `body?: string` (markdown), `tag?: string`, `resolution?: "acknowledged" | "dismissed" | "asked"` (absent while open). `agent`, `summary`, `title`, `tag` are single lines.
 B. **Server MCP tool** `t3_thread_notify` in the orchestrator toolkit, requires the `orchestration:operate` scope (read-only agents cannot post): `{threadId, summary, title?, body?, tag?, agent, clientRequestId}` → creates the external notification item without waking the agent (no user message). Returns `{notificationId}`.
 C. **Resolve path**: a WS command (and MCP tool `t3_thread_notification_resolve`, read for symmetry) that sets `resolution` on an external notification; the client calls it from the buttons. Outside agents observe the resolution via `subscribeThread` / `t3_thread_read` so they can learn what was understood.
-D. **Client** (`apps/web`): render the latest *open* external notification of the thread as a strip above the composer: `<tag> · <summary>`; expand shows `title` + `body`; buttons *Got it* → resolution `acknowledged`; *Not useful* → `dismissed`; *Ask in chat* → resolution `asked` + insert `body` quoted into the composer and submit. Timeline card rendering of the item stays as today.
+D. **Client** (`apps/web`): render the latest *open* external notification of the thread as a strip above the composer: `<tag> · <summary>`; expand shows `title` + `body`; buttons *Got it* → resolution `acknowledged`; *Not useful* → `dismissed`; *Ask in chat* → insert the note quoted into the composer and submit; resolution `asked` only once the send went through (with a draft in progress, the note waits at the end of the draft and the strip stays). The closing line is generic ("Answer this note straight away."), not the Claude Code tool ban, since a CI notice may need investigation. A second, different resolution is refused. Timeline card rendering of the item stays as today.
 
 Keep the patch small and generic; wording of code/comments/commit in English; follow the repo's AGENTS.md / CONTRIBUTING.md conventions (tests required, no unrelated cleanup).
 
@@ -56,6 +56,8 @@ Keep the patch small and generic; wording of code/comments/commit in English; fo
 - Sinks, pluggable: `t3` (calls `t3_thread_notify` over MCP at `<origin>/mcp` — the tool from Piece 1; may not exist yet, so detect its absence and log), `macos` (osascript notification, for testing before Piece 1 lands), `stdout`.
 - Feedback loop: reads notification resolutions (`acknowledged` → add learn line to the avoid list for that thread + global seen list; `dismissed` → nothing; `asked` → nothing). State in `~/.local/state/t3-you-should-know/state.json`: per thread last suggestions (max 10), consecutive misses (for backoff), global seen list.
 - Backoff like the plugin. Cost guard: skip turns shorter than N new items; max 1 note per thread per X minutes.
+- Reliability: the run watermark only drives discovery; each completed turn goes to a pending queue (one per thread, with a fixed clientRequestId) and is retried up to 3 times on model or delivery failure.
+- Safety: the transcript is quoted as untrusted evidence (prompt rule, `</session>` escaped, output length limits mirror the tool schema).
 - CLI: `t3-ysk run` (foreground), `t3-ysk once --thread <id>` (dry run, prints the model output), `t3-ysk status`.
 - README in English, short.
 

@@ -12,7 +12,8 @@ export interface DeliverResult {
 }
 
 export interface Sink {
-  deliver(threadId: string, threadTitle: string, note: Note): Promise<DeliverResult>;
+  /** `clientRequestId` is stable across retries of the same note, for idempotent delivery. */
+  deliver(threadId: string, threadTitle: string, note: Note, clientRequestId: string): Promise<DeliverResult>;
 }
 
 export function makeSink(cfg: Config, name = cfg.sink): Sink {

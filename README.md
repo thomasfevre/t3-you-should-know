@@ -43,13 +43,13 @@ The `claude-cli` backend runs `claude -p` with no tools, no settings, no session
 ## How it talks to T3
 
 - **Reading** (default): the local SQLite database `~/.t3/userdata/statev2.sqlite`, opened read-only. A run that reaches `completed` in `orchestration_v2_projection_runs` triggers an analysis; the transcript comes from `orchestration_v2_projection_turn_items`. Nothing is ever written to T3's data.
-- **Posting**: the `t3` sink calls the MCP tool `t3_thread_notify` on `<origin>/mcp` (origin from `server-runtime.json`). The endpoint needs a bearer token: `t3 auth session issue --scope orchestration:read --scope orchestration:operate --ttl 30d --token-only`, then put it in `t3Token`. Issuing a session writes to T3's own auth store, which is why this tool does not do it for you.
+- **Posting**: the `t3` sink calls the MCP tool `t3_thread_notify` on `<origin>/mcp` (origin from `server-runtime.json`). The endpoint needs a bearer token: `t3 auth session issue --subject mcp-client --scope orchestration:read --scope orchestration:operate --ttl 30d --token-only`, then put it in `t3Token` (or `T3_YSK_TOKEN`). The `--subject mcp-client` part matters: the `/mcp` endpoint only accepts sessions issued for that subject, a session for the default subject is rejected with 401. Issuing a session writes to T3's own auth store, which is why this tool does not do it for you.
 - **Feedback**: notes resolved as `acknowledged` ("Got it") are added to the avoid list; the daemon reads them back from the thread, matching by the `notificationId` returned by `t3_thread_notify` (summary text only as a fallback).
 - `src/t3/ws.ts` (WebSocket RPC reader) is a documented stub; the sqlite poller makes it unnecessary.
 
 ## Status of the T3 patch dependency
 
-`t3_thread_notify` and the notification `resolution` field do not exist in upstream T3 Code yet (a patch is in progress). Until it lands, the `t3` sink logs `not delivered (tool_missing | unauthorized)` once and the daemon backs off. Use `--sink macos` or `sink: "macos"` to get native notifications in the meantime.
+`t3_thread_notify` and the notification `resolution` field do not exist in upstream T3 Code yet (a patch is in progress). Until it lands, the `t3` sink logs `not delivered (tool_missing | unauthorized)` once; the daemon retries a turn up to 3 times, then drops it. Use `--sink macos` or `sink: "macos"` to get native notifications in the meantime.
 
 ## Tests
 

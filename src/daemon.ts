@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Backend } from "./backends/index.ts";
 import { skipTurns } from "./backoff.ts";
 import type { Config } from "./config.ts";
@@ -46,6 +47,9 @@ export async function analyze(
 function countRenderable(items: RawItem[]): number {
   return items.filter((i) => renderItem(i) !== null).length;
 }
+
+/** A turn that fails this many times (model down, T3 unreachable) is dropped with a log line. */
+export const MAX_ATTEMPTS = 3;
 
 export class Daemon {
   private running = false;
@@ -96,25 +100,45 @@ export class Daemon {
   }
 
   async tick(): Promise<void> {
-    const since = this.store.state.lastSeenRunAt!;
-    const runs = this.db.terminalRunsSince(since);
-    // One analysis per thread per tick, even if several runs finished.
-    const lastRunByThread = new Map<string, (typeof runs)[number]>();
-    for (const r of runs) if (r.status === "completed") lastRunByThread.set(r.threadId, r);
-    for (const r of runs) this.store.state.lastSeenRunAt = r.completedAt;
-
-    for (const run of lastRunByThread.values()) {
-      try {
-        await this.onTurnCompleted(run.threadId);
-      } catch (e: any) {
-        this.log(`thread ${run.threadId}: ${e?.message ?? e}`);
-      }
-    }
+    // Feedback first, so a "Got it" given since the last tick shapes this tick's prompts.
     this.syncResolutions();
+    this.discoverTurns();
     this.store.save();
+
+    // One pending turn per thread; a later completion replaces an earlier one still waiting.
+    for (const [threadId, pending] of Object.entries(this.store.state.pending)) {
+      pending.attempts++;
+      try {
+        await this.onTurnCompleted(threadId, pending.clientRequestId);
+        delete this.store.state.pending[threadId];
+      } catch (e: any) {
+        this.log(`thread ${threadId}: attempt ${pending.attempts} failed: ${e?.message ?? e}`);
+        if (pending.attempts >= MAX_ATTEMPTS) {
+          this.log(`thread ${threadId}: giving up on this turn after ${pending.attempts} attempts`);
+          delete this.store.state.pending[threadId];
+        }
+      }
+      this.store.save();
+    }
   }
 
-  private async onTurnCompleted(threadId: string): Promise<void> {
+  /** Move the discovery cursor and queue the newest completed run of each thread. */
+  private discoverTurns(): void {
+    const runs = this.db.terminalRunsSince(this.store.state.lastSeenRunAt!);
+    for (const r of runs) {
+      this.store.state.lastSeenRunAt = r.completedAt;
+      if (r.status !== "completed") continue;
+      const current = this.store.state.pending[r.threadId];
+      this.store.state.pending[r.threadId] = {
+        completedAt: r.completedAt,
+        attempts: 0,
+        clientRequestId: current?.clientRequestId ?? randomUUID(),
+      };
+    }
+  }
+
+  /** Throws on model or delivery failure, so the tick keeps the turn pending. */
+  private async onTurnCompleted(threadId: string, clientRequestId: string): Promise<void> {
     const thread = this.db.getThread(threadId);
     if (!thread || thread.archived) return;
     const ts = this.store.thread(threadId);
@@ -142,13 +166,12 @@ export class Daemon {
     this.log(`${threadId}: model answered in ${a.ms} ms (${a.parsed.kind})`);
 
     if (a.parsed.kind === "note") {
-      const res = await this.sink.deliver(threadId, thread.title, a.parsed.note);
-      if (res.delivered) {
-        this.store.addRecent(threadId, a.parsed.note.learn, this.now().toISOString(), res.notificationId);
-        return;
-      }
+      const res = await this.sink.deliver(threadId, thread.title, a.parsed.note, clientRequestId);
+      if (!res.delivered) throw new Error("note not delivered");
+      this.store.addRecent(threadId, a.parsed.note.learn, this.now().toISOString(), res.notificationId);
+      return;
     }
-    // none, invalid, or not delivered: count as a miss so the backoff protects the budget
+    // none or invalid: count as a miss so the backoff protects the budget
     ts.consecutiveMisses++;
     ts.skipRemaining = skipTurns(ts.consecutiveMisses);
   }

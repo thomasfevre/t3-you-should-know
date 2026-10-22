@@ -20,7 +20,7 @@ export function renderItem(item: RawItem): string | null {
     case "assistant_message":
       return text(p.text) ? `ASSISTANT: ${clip(p.text, MAX_MESSAGE_CHARS)}` : null;
     case "command_execution":
-      return `[command] ${oneLine(p.input)}${item.status && item.status !== "completed" ? ` (${item.status})` : ""}`;
+      return `[command] ${oneLine(p.input)}${commandOutcome(item)}`;
     case "file_change":
       return `[file ${fileAction(p.diffStr)}] ${p.fileName ?? "?"}`;
     case "dynamic_tool":
@@ -39,6 +39,19 @@ export function renderItem(item: RawItem): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * The result of a command, as far as T3 recorded it. An exit code is the primary evidence;
+ * `outputIndicatesFailure` covers tools that report failure without a code.
+ */
+function commandOutcome(item: RawItem): string {
+  const p = item.payload;
+  const parts: string[] = [];
+  if (typeof p.exitCode === "number") parts.push(`exit ${p.exitCode}`);
+  if (p.outputIndicatesFailure === true) parts.push("output indicates failure");
+  if (item.status && item.status !== "completed") parts.push(item.status);
+  return parts.length ? ` (${parts.join(", ")})` : "";
 }
 
 /** Keep the newest items that fit the budget. Items must be sorted oldest first. */
@@ -61,7 +74,8 @@ function text(v: unknown): v is string {
 }
 
 function clip(s: string, max: number): string {
-  s = s.trim();
+  // Session text is quoted inside a <session> block; it must not be able to close it.
+  s = s.trim().replace(/<(\/?)session>/gi, "<$1session\u200b>");
   return s.length <= max ? s : `${s.slice(0, max)}... [truncated]`;
 }
 
