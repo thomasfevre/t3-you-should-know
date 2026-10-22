@@ -129,13 +129,11 @@ export class Daemon {
       this.store.state.lastSeenRunAt = r.completedAt;
       if (r.status !== "completed") continue;
       const current = this.store.state.pending[r.threadId];
-      // A note already produced for this thread still goes out; it is not stale after one more turn.
-      this.store.state.pending[r.threadId] = {
-        ...current,
-        completedAt: r.completedAt,
-        attempts: 0,
-        clientRequestId: current?.clientRequestId ?? randomUUID(),
-      };
+      // A note already produced for this thread still goes out, with its attempts so far; it is
+      // not stale after one more turn. Only a turn with no note yet starts a fresh count.
+      this.store.state.pending[r.threadId] = current?.note
+        ? { ...current, completedAt: r.completedAt }
+        : { completedAt: r.completedAt, attempts: 0, clientRequestId: current?.clientRequestId ?? randomUUID() };
     }
   }
 

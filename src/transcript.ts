@@ -22,15 +22,15 @@ export function renderItem(item: RawItem): string | null {
     case "command_execution":
       return `[command] ${oneLine(p.input)}${commandOutcome(item)}`;
     case "file_change":
-      return `[file ${fileAction(p.diffStr)}] ${p.fileName ?? "?"}`;
+      return `[file ${oneLine(fileAction(p.diffStr), 20)}] ${oneLine(p.fileName ?? "?")}`;
     case "dynamic_tool":
-      return `[tool] ${p.toolName ?? p.title ?? "?"} ${oneLine(JSON.stringify(p.input ?? {}), 100)}${
+      return `[tool] ${oneLine(p.toolName ?? p.title ?? "?", 80)} ${oneLine(JSON.stringify(p.input ?? {}), 100)}${
         item.status === "failed" ? " (failed)" : ""
       }`;
     case "web_search":
       return `[web search] ${oneLine((p.patterns ?? []).join(", "))}`;
     case "subagent":
-      return `[subagent] ${oneLine(p.title ?? "")} (${item.status ?? "?"})`;
+      return `[subagent] ${oneLine(p.title ?? "")} (${oneLine(item.status ?? "?", 20)})`;
     case "error":
       return `[error] ${oneLine(p.title ?? p.failure?.message ?? "")}`;
     case "notification":
@@ -54,14 +54,6 @@ function commandOutcome(item: RawItem): string {
   return parts.length ? ` (${parts.join(", ")})` : "";
 }
 
-/**
- * Session text is quoted inside a <session> block in the prompt; nothing in it, whatever the
- * field it came from, may close that block. Applied once on the whole transcript.
- */
-export function escapeSessionTags(s: string): string {
-  return s.replace(/<(\/?)session>/gi, "<$1session\u200b>");
-}
-
 /** Keep the newest items that fit the budget. Items must be sorted oldest first. */
 export function buildTranscript(items: RawItem[], budgetTokens = 12000): string {
   const budget = budgetTokens * CHARS_PER_TOKEN;
@@ -74,7 +66,7 @@ export function buildTranscript(items: RawItem[], budgetTokens = 12000): string 
     kept.push(line);
     used += line.length + 1;
   }
-  return escapeSessionTags(kept.reverse().join("\n"));
+  return kept.reverse().join("\n");
 }
 
 function text(v: unknown): v is string {

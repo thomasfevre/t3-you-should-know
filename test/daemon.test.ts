@@ -51,6 +51,20 @@ describe("Daemon.tick", () => {
     expect(store.thread("t1").open).toHaveLength(1);
   });
 
+  it("keeps counting attempts of an undelivered note while the thread goes on", async () => {
+    const backend = { complete: async () => NOTE };
+    let deliveries = 0;
+    const { daemon, store } = setup(backend, { deliver: async () => { deliveries++; return { delivered: false }; } });
+    const db = (daemon as any).db;
+    for (let i = 1; i <= MAX_ATTEMPTS; i++) {
+      // a new turn completes on the same thread before each retry
+      db.terminalRunsSince = () => [{ threadId: "t1", completedAt: `2026-01-0${i + 2}T00:00:00.000Z`, runId: "r", ordinal: i, status: "completed" }];
+      await daemon.tick();
+    }
+    expect(deliveries).toBe(MAX_ATTEMPTS);
+    expect(store.state.pending.t1).toBeUndefined();
+  });
+
   it("gives up on a turn after the attempt cap", async () => {
     const backend = { complete: async () => { throw new Error("down"); } };
     const { daemon, store, logs } = setup(backend, { deliver: async () => ({ delivered: true }) });
