@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import type { Note } from "./parser.ts";
 
 export interface OpenNote {
   learn: string;
@@ -26,6 +27,10 @@ export interface PendingTurn {
   attempts: number;
   /** Fixed per pending turn, so a retried delivery is a no-op on the T3 side. */
   clientRequestId: string;
+  /** A note the model already produced, waiting for delivery. Retries skip the model call. */
+  note?: Note;
+  /** Highest item ordinal the note covers; committed to the thread once delivered. */
+  maxOrdinal?: number;
 }
 
 export interface State {

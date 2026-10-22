@@ -1,3 +1,5 @@
+import { escapeSessionTags } from "./transcript.ts";
+
 // Side-agent prompt. The rules follow the Claude Code "you should know" plugin wording.
 
 export const SYSTEM_PROMPT = `You are a helpful observer whose goal is to help the human better understand their work. Pause for a moment to reflect on this session so far. Is there anything that the human should *really* know about their session, that they very likely (or clearly) do not understand? Try to find one topic to suggest to the human to understand, and explain it in plain language.
@@ -49,6 +51,6 @@ export function buildUserPrompt(input: PromptInput): string {
     list(input.seen),
   ];
   if (input.language) parts.push("", `Language instruction: ${input.language}`);
-  parts.push("", "Here is the session so far:", "<session>", input.transcript, "</session>");
+  parts.push("", "Here is the session so far:", "<session>", escapeSessionTags(input.transcript), "</session>");
   return parts.join("\n");
 }

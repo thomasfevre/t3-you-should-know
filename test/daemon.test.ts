@@ -59,11 +59,31 @@ describe("Daemon.tick", () => {
     expect(logs.some((l) => l.includes("giving up"))).toBe(true);
   });
 
-  it("treats a failed delivery as a retry, not as a miss", async () => {
-    const backend = { complete: async () => NOTE };
-    const { daemon, store } = setup(backend, { deliver: async () => ({ delivered: false }) });
+  it("retries a failed delivery with the same note and request id, without a new model call", async () => {
+    let calls = 0;
+    const backend = { complete: async () => { calls++; return NOTE; } };
+    const delivered: string[] = [];
+    let fail = true;
+    const sink = { deliver: async (_t: string, _title: string, _n: unknown, id: string) => { delivered.push(id); return { delivered: !fail }; } };
+    const { daemon, store } = setup(backend, sink);
+
     await daemon.tick();
     expect(store.state.pending.t1?.attempts).toBe(1);
+    expect(store.state.pending.t1?.note?.learn).toBe("Tests were skipped.");
     expect(store.thread("t1").consecutiveMisses).toBe(0);
+    expect(store.thread("t1").lastOrdinal).toBe(0); // history moves only once the note is out
+
+    // Simulate a restart: the pending note survives a reload of the state.
+    const reloaded = JSON.parse(JSON.stringify(store.state));
+    store.state = { ...store.state, ...reloaded };
+
+    fail = false;
+    await daemon.tick();
+    expect(calls).toBe(1);
+    expect(delivered).toHaveLength(2);
+    expect(delivered[0]).toBe(delivered[1]);
+    expect(store.state.pending.t1).toBeUndefined();
+    expect(store.thread("t1").lastOrdinal).toBe(4);
+    expect(store.thread("t1").open).toHaveLength(1);
   });
 });

@@ -54,6 +54,14 @@ function commandOutcome(item: RawItem): string {
   return parts.length ? ` (${parts.join(", ")})` : "";
 }
 
+/**
+ * Session text is quoted inside a <session> block in the prompt; nothing in it, whatever the
+ * field it came from, may close that block. Applied once on the whole transcript.
+ */
+export function escapeSessionTags(s: string): string {
+  return s.replace(/<(\/?)session>/gi, "<$1session\u200b>");
+}
+
 /** Keep the newest items that fit the budget. Items must be sorted oldest first. */
 export function buildTranscript(items: RawItem[], budgetTokens = 12000): string {
   const budget = budgetTokens * CHARS_PER_TOKEN;
@@ -66,7 +74,7 @@ export function buildTranscript(items: RawItem[], budgetTokens = 12000): string 
     kept.push(line);
     used += line.length + 1;
   }
-  return kept.reverse().join("\n");
+  return escapeSessionTags(kept.reverse().join("\n"));
 }
 
 function text(v: unknown): v is string {
@@ -74,8 +82,7 @@ function text(v: unknown): v is string {
 }
 
 function clip(s: string, max: number): string {
-  // Session text is quoted inside a <session> block; it must not be able to close it.
-  s = s.trim().replace(/<(\/?)session>/gi, "<$1session\u200b>");
+  s = s.trim();
   return s.length <= max ? s : `${s.slice(0, max)}... [truncated]`;
 }
 

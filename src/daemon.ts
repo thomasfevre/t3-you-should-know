@@ -5,7 +5,7 @@ import type { Config } from "./config.ts";
 import { parseOutput, type ParseResult } from "./parser.ts";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt.ts";
 import type { Sink } from "./sinks/index.ts";
-import { matchOpenNote, type StateStore } from "./state.ts";
+import { matchOpenNote, type PendingTurn, type StateStore } from "./state.ts";
 import type { T3Sqlite } from "./t3/sqlite.ts";
 import { buildTranscript, renderItem, type RawItem } from "./transcript.ts";
 
@@ -109,7 +109,7 @@ export class Daemon {
     for (const [threadId, pending] of Object.entries(this.store.state.pending)) {
       pending.attempts++;
       try {
-        await this.onTurnCompleted(threadId, pending.clientRequestId);
+        await this.onTurnCompleted(threadId, pending);
         delete this.store.state.pending[threadId];
       } catch (e: any) {
         this.log(`thread ${threadId}: attempt ${pending.attempts} failed: ${e?.message ?? e}`);
@@ -129,7 +129,9 @@ export class Daemon {
       this.store.state.lastSeenRunAt = r.completedAt;
       if (r.status !== "completed") continue;
       const current = this.store.state.pending[r.threadId];
+      // A note already produced for this thread still goes out; it is not stale after one more turn.
       this.store.state.pending[r.threadId] = {
+        ...current,
         completedAt: r.completedAt,
         attempts: 0,
         clientRequestId: current?.clientRequestId ?? randomUUID(),
@@ -138,10 +140,11 @@ export class Daemon {
   }
 
   /** Throws on model or delivery failure, so the tick keeps the turn pending. */
-  private async onTurnCompleted(threadId: string, clientRequestId: string): Promise<void> {
+  private async onTurnCompleted(threadId: string, pending: PendingTurn): Promise<void> {
     const thread = this.db.getThread(threadId);
     if (!thread || thread.archived) return;
     const ts = this.store.thread(threadId);
+    if (pending.note) return this.deliver(threadId, thread.title, pending);
 
     if (ts.skipRemaining > 0) {
       ts.skipRemaining--;
@@ -162,18 +165,28 @@ export class Daemon {
     }
 
     const a = await analyze(this.db, this.backend, this.cfg, this.store, threadId);
-    ts.lastOrdinal = a.maxOrdinal;
     this.log(`${threadId}: model answered in ${a.ms} ms (${a.parsed.kind})`);
 
     if (a.parsed.kind === "note") {
-      const res = await this.sink.deliver(threadId, thread.title, a.parsed.note, clientRequestId);
-      if (!res.delivered) throw new Error("note not delivered");
-      this.store.addRecent(threadId, a.parsed.note.learn, this.now().toISOString(), res.notificationId);
-      return;
+      pending.note = a.parsed.note;
+      pending.maxOrdinal = a.maxOrdinal;
+      this.store.save();
+      return this.deliver(threadId, thread.title, pending);
     }
     // none or invalid: count as a miss so the backoff protects the budget
+    ts.lastOrdinal = a.maxOrdinal;
     ts.consecutiveMisses++;
     ts.skipRemaining = skipTurns(ts.consecutiveMisses);
+  }
+
+  /** Posts a produced note; the thread's history moves forward only once it is out. */
+  private async deliver(threadId: string, title: string, pending: PendingTurn): Promise<void> {
+    const note = pending.note!;
+    const res = await this.sink.deliver(threadId, title, note, pending.clientRequestId);
+    if (!res.delivered) throw new Error("note not delivered");
+    const ts = this.store.thread(threadId);
+    ts.lastOrdinal = Math.max(ts.lastOrdinal, pending.maxOrdinal ?? 0);
+    this.store.addRecent(threadId, note.learn, this.now().toISOString(), res.notificationId);
   }
 
   /** Feedback loop: close open notes whose resolution has been set in T3. */
