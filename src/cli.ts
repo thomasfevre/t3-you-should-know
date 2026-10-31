@@ -76,6 +76,8 @@ function status(cfg: ReturnType<typeof loadConfig>) {
   }
   for (const [id, notes] of Object.entries(store.state.inbox)) console.log(`  inbox ${id}: ${notes.map((n) => n.learn).join(" | ")}`);
   const db = new T3Sqlite(cfg.userdataDir, cfg.includeSubagentThreads);
+  const problems = db.schemaProblems();
+  console.log(problems.length ? `T3 FORMAT CHANGED: ${problems.join("; ")}` : "T3 format: ok");
   console.log("recent threads:");
   for (const t of db.recentThreads(5)) console.log(`  ${t.threadId}  ${t.title}`);
 }

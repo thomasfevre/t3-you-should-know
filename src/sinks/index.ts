@@ -30,7 +30,9 @@ export function makeSink(cfg: Config, name = cfg.sink, ctx?: { store: StateStore
       return new InlineSink({
         store: ctx.store,
         watermarks: (id) => ctx.db.watermarks(id),
-        markUnread: (id) => mcp.markUnread(id),
+        // T3 refuses mark_unread on full-access threads from an outside client
+        // (runtime_mode_escalation_denied), so the dot is only tried when a token is set.
+        markUnread: cfg.t3Token ? (id) => mcp.markUnread(id) : async () => true,
         log: (m) => console.log(`${new Date().toISOString()} ${m}`),
       });
     }

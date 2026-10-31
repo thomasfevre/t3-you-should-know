@@ -54,6 +54,7 @@ No T3 change needed. When a note is ready for a chat:
 
 1. the daemon queues it in its state file and puts T3's unread dot on that chat (stock MCP tool `t3_thread_organize`, needs `t3Token`; without it the note is still queued, just no dot);
 2. on your next message in that chat, a `UserPromptSubmit` hook hands the note to the agent, which starts its reply with `💡 You should know: …`;
+   T3 refuses `mark_unread` from an outside client on full-access threads (`runtime_mode_escalation_denied`), so in practice there is no dot; leave `t3Token` unset.
 3. the daemon sees that line in the thread and drops the note. A note not shown after 3 completed runs or 7 days is dropped.
 
 The hook (`t3-ysk hook --provider claudeAgent|codex`) is read-only. It only acts in a process T3 spawned (`T3CODE_THREAD_ID` is set) and only when T3's database binds the hook's `session_id` to that thread for that provider; anything else prints nothing. It never re-injects a note already printed in the thread.

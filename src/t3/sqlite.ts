@@ -47,6 +47,26 @@ export class T3Sqlite {
     this.db.exec("PRAGMA busy_timeout = 2000");
   }
 
+  /**
+   * T3's tables are internal, not an API. Lists what this tool relies on and no longer finds,
+   * so a T3 update that changes them shows up in the log instead of silently stopping notes.
+   */
+  schemaProblems(): string[] {
+    const need: Record<string, string[]> = {
+      orchestration_v2_projection_threads: ["thread_id", "title", "updated_at", "archived_at", "deleted_at"],
+      orchestration_v2_projection_runs: ["thread_id", "ordinal", "status", "completed_at"],
+      orchestration_v2_projection_turn_items: ["thread_id", "type", "status", "ordinal", "payload_json"],
+      orchestration_v2_projection_provider_threads: ["thread_id", "payload_json"],
+    };
+    const out: string[] = [];
+    for (const [table, cols] of Object.entries(need)) {
+      const have = new Set((this.db.prepare(`PRAGMA table_info(${table})`).all() as any[]).map((r) => r.name));
+      if (have.size === 0) out.push(`table ${table} missing`);
+      else for (const c of cols) if (!have.has(c)) out.push(`${table}.${c} missing`);
+    }
+    return out;
+  }
+
   close() {
     this.db.close();
   }

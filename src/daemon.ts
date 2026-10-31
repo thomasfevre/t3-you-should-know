@@ -86,13 +86,27 @@ export class Daemon {
     // Do not replay history on first start: only runs finishing from now on are analysed.
     this.store.state.lastSeenRunAt ??= this.now().toISOString();
     this.log(`watching runs after ${this.store.state.lastSeenRunAt}`);
+    this.checkSchema();
     while (this.running) {
       try {
         await this.tick();
       } catch (e: any) {
         this.log(`tick failed: ${e?.message ?? e}`);
+        this.checkSchema();
       }
       await new Promise((r) => setTimeout(r, this.cfg.pollIntervalMs));
+    }
+  }
+
+  /** Loud log line when T3's internal tables no longer look like what this tool reads. */
+  private checkSchema(): void {
+    const db = this.db as Partial<T3Sqlite>;
+    if (!db.schemaProblems) return;
+    try {
+      const problems = db.schemaProblems();
+      if (problems.length) this.log(`T3 FORMAT CHANGED, notes will not work: ${problems.join("; ")}`);
+    } catch (e: any) {
+      this.log(`T3 FORMAT CHECK FAILED: ${e?.message ?? e}`);
     }
   }
 
