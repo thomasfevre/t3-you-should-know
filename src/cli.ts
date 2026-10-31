@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import { makeBackend } from "./backends/index.ts";
 import { loadConfig } from "./config.ts";
 import { hookMain } from "./hook.ts";
+import { enqueue } from "./queue.ts";
 import { readDisabled, setEnabled } from "./toggle.ts";
 import { analyze, Daemon } from "./daemon.ts";
 import { makeSink } from "./sinks/index.ts";
@@ -14,6 +15,8 @@ const USAGE = `t3-ysk run [--userdata <dir>]                  watch T3 and post 
 t3-ysk once --thread <id> [--sink stdout|macos|t3] [--userdata <dir>]
                                             analyse one thread now; prints the note, or posts it with --sink t3
 t3-ysk status [--userdata <dir>]               show state, T3 server and recent threads
+t3-ysk queue --thread <id> [--learn <text>]    hand a note to the running daemon now (demos): the given line,
+                                            or what the model finds in the thread right now
 t3-ysk off|on [--thread <id>]                  turn notes off/on in a chat (default: the chat this runs in)
 t3-ysk hook --provider claudeAgent|codex       UserPromptSubmit hook: hands queued notes to the agent (read-only)`;
 
@@ -26,6 +29,7 @@ async function main() {
       userdata: { type: "string" },
       "no-state": { type: "boolean" },
       provider: { type: "string" },
+      learn: { type: "string" },
     },
   });
   const cmd = positionals[0];
@@ -43,6 +47,23 @@ async function main() {
     if (!id) throw new Error("no chat: run it from a T3 chat, or pass --thread <id>");
     setEnabled(cfg.statePath, id, cmd === "on");
     console.log(`You should know: ${cmd} for ${id}`);
+    return;
+  }
+  if (cmd === "queue") {
+    if (!values.thread) throw new Error("--thread <id> is required");
+    let note;
+    if (values.learn) note = { learn: values.learn, tag: "You should know" as const, title: values.learn, body: values.learn };
+    else {
+      const db = new T3Sqlite(cfg.userdataDir, true);
+      const a = await analyze(db, makeBackend(cfg), cfg, new StateStore(cfg.statePath), values.thread);
+      if (a.parsed.kind !== "note") {
+        console.log(`model found nothing to say (${a.parsed.kind}); pass --learn "<text>" to queue your own line`);
+        process.exit(2);
+      }
+      note = a.parsed.note;
+    }
+    enqueue(cfg.statePath, { threadId: values.thread, note });
+    console.log(`queued for ${values.thread}:\n  ${note.learn}\nIt shows up at the top of the agent's next reply in that chat.`);
     return;
   }
   if (cmd === "hook") return hookMain(cfg, values.provider ?? "");

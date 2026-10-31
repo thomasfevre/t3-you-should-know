@@ -199,3 +199,25 @@ describe("per-chat off switch", () => {
     expect(readDisabled(state).size).toBe(0);
   });
 });
+
+describe("t3-ysk queue", () => {
+  it("the daemon delivers queued notes once and empties the queue", async () => {
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { enqueue } = await import("../src/queue.ts");
+    const statePath = join(mkdtempSync(join(tmpdir(), "ysk-")), "state.json");
+    const store = new StateStore(statePath);
+    store.save = () => {};
+    store.state.lastSeenRunAt = "2026-10-31T00:00:00.000Z";
+    const got: string[] = [];
+    const sink = { deliver: async (t: string, _ti: string, n: any) => { got.push(`${t}:${n.learn}`); return { delivered: true }; } };
+    const db = { terminalRunsSince: () => [], resolutions: () => [], getThread: () => ({ title: "T" }) } as any;
+    const d = new Daemon(db, {} as any, sink as any, { ...defaults(), statePath }, store, () => {});
+    enqueue(statePath, { threadId: "t1", note: { learn: "demo line", tag: "You should know", title: "x", body: "x" } });
+    await d.tick();
+    await d.tick();
+    expect(got).toEqual(["t1:demo line"]);
+    expect(store.thread("t1").recent).toEqual(["demo line"]);
+  });
+});

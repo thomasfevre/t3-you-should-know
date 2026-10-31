@@ -5,6 +5,7 @@ import type { Config } from "./config.ts";
 import { parseOutput, type ParseResult } from "./parser.ts";
 import { alreadyShown, EXPIRE_AFTER_DAYS, EXPIRE_AFTER_RUNS, type InlineDb } from "./inline.ts";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt.ts";
+import { takeQueued } from "./queue.ts";
 import { readDisabled } from "./toggle.ts";
 import type { Sink } from "./sinks/index.ts";
 import { matchOpenNote, type PendingTurn, type StateStore } from "./state.ts";
@@ -120,6 +121,7 @@ export class Daemon {
     this.syncResolutions();
     this.reconcileInbox();
     this.discoverTurns();
+    await this.deliverQueued();
     this.store.save();
 
     // One pending turn per thread; a later completion replaces an earlier one still waiting.
@@ -205,6 +207,16 @@ export class Daemon {
     const ts = this.store.thread(threadId);
     ts.lastOrdinal = Math.max(ts.lastOrdinal, pending.maxOrdinal ?? 0);
     this.store.addRecent(threadId, note.learn, this.now().toISOString(), res.notificationId);
+  }
+
+  /** Notes handed over with `t3-ysk queue`: delivered now, no model call, no rate limit. */
+  private async deliverQueued(): Promise<void> {
+    for (const q of takeQueued(this.cfg.statePath)) {
+      const thread = this.db.getThread(q.threadId);
+      const res = await this.sink.deliver(q.threadId, thread?.title ?? "", q.note, randomUUID());
+      if (res.delivered) this.store.addRecent(q.threadId, q.note.learn, this.now().toISOString(), res.notificationId);
+      this.log(`${q.threadId}: queued note ${res.delivered ? "delivered" : "NOT delivered"}`);
+    }
   }
 
   /** `inline` sink: drop queued notes that are now in the thread, or that expired. */
