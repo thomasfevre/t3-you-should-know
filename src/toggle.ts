@@ -19,7 +19,7 @@ export function setEnabled(statePath: string, threadId: string, enabled: boolean
   if (enabled) set.delete(threadId);
   else set.add(threadId);
   const p = disabledPath(statePath);
-  mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(`${p}.tmp`, JSON.stringify([...set], null, 2));
+  mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
+  writeFileSync(`${p}.tmp`, JSON.stringify([...set], null, 2), { mode: 0o600 });
   renameSync(`${p}.tmp`, p);
 }

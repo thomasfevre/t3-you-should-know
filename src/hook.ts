@@ -128,6 +128,8 @@ export function completedRunsAfter(db: DatabaseSync, threadId: string, runOrdina
 
 export function hookMain(cfg: Config, provider: string): void {
   if (provider !== "claudeAgent" && provider !== "codex") return;
+  // Installed globally, so it runs for every prompt: outside T3, exit before reading anything.
+  if (!process.env.T3CODE_THREAD_ID && !process.env.T3CODE_CLI_PATH) return;
   let stdin = "";
   try {
     stdin = readFileSync(0, "utf8");

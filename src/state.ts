@@ -79,9 +79,9 @@ export class StateStore {
 
 
   save() {
-    mkdirSync(dirname(this.path), { recursive: true });
+    mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
     const tmp = `${this.path}.tmp`;
-    writeFileSync(tmp, JSON.stringify(this.state, null, 2));
+    writeFileSync(tmp, JSON.stringify(this.state, null, 2), { mode: 0o600 });
     renameSync(tmp, this.path);
   }
 }

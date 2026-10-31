@@ -19,8 +19,8 @@ export function enqueue(statePath: string, item: QueuedNote): void {
   } catch {
     // no queue yet
   }
-  mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(`${p}.tmp`, JSON.stringify([...items, item], null, 2));
+  mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
+  writeFileSync(`${p}.tmp`, JSON.stringify([...items, item], null, 2), { mode: 0o600 });
   renameSync(`${p}.tmp`, p);
 }
 

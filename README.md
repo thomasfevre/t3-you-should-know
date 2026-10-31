@@ -47,6 +47,14 @@ Hook entry (Claude: `~/.claude/settings.json`, Codex: `~/.codex/hooks.json`, und
 { "hooks": [{ "type": "command", "command": "/path/to/node /path/to/bin/t3-ysk.mjs hook --provider claudeAgent", "timeout": 2 }] }
 ```
 
+## Security
+
+- **Data sent out:** the recent transcript of each analysed turn goes to the configured model (your `claude` CLI by default). Common token shapes (API keys, GitHub/Slack tokens, JWTs, private keys, `*_TOKEN=` values) are redacted first. This is best effort: other secrets in a chat can still be sent.
+- **Prompt injection:** chat content can try to steer the note. The model is told the transcript is data, notes with links are rejected, and the agent gets the note as a quoted line, stripped of control characters and capped at 500 characters. That lowers the risk, it does not remove it.
+- **The hook runs on every prompt** of every Claude/Codex session. Outside a T3-started process it exits before reading any file.
+- **Local files:** state, queue and off-list are private to your user (`0700` dir, `0600` files). T3's database is only ever opened read-only.
+- The `claude-cli` backend runs with no tools, no settings, no MCP and no session file, in an empty temp dir.
+
 ## Commands
 
 ```sh

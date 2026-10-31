@@ -1,4 +1,5 @@
 // Turns raw T3 turn items into a compact text transcript under a token budget.
+import { redactSecrets } from "./secrets.ts";
 
 export interface RawItem {
   type: string;
@@ -66,7 +67,7 @@ export function buildTranscript(items: RawItem[], budgetTokens = 12000): string 
     kept.push(line);
     used += line.length + 1;
   }
-  return kept.reverse().join("\n");
+  return redactSecrets(kept.reverse().join("\n"));
 }
 
 function text(v: unknown): v is string {

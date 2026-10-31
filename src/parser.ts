@@ -34,6 +34,8 @@ export function parseOutput(raw: string): ParseResult {
   if (/^none\.?$/i.test(learn)) return { kind: "none" };
   if (!learn) return { kind: "invalid", reason: "empty learn line" };
   if (learn.length > LIMITS.learn) return { kind: "invalid", reason: "learn line too long" };
+  // The note reaches the agent's context: a link in it is never needed and could be a lure.
+  if (/https?:\/\/|www\./i.test(learn)) return { kind: "invalid", reason: "link in learn line" };
 
   let i = first + 1;
   while (i < lines.length && lines[i].trim() === "") i++;
