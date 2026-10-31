@@ -12,7 +12,6 @@ function fakeDb(runs: { threadId: string; completedAt: string }[], items: RawIte
       runs.filter((r) => r.completedAt > since).map((r) => ({ ...r, runId: "r", ordinal: 1, status: "completed" })),
     getThread: (id: string) => ({ threadId: id, title: "T", archived: false }),
     items: (_id: string, after = 0) => items.filter((i) => i.ordinal > after),
-    resolutions: () => [],
   } as any;
 }
 
@@ -48,7 +47,7 @@ describe("Daemon.tick", () => {
     expect(calls).toBe(2);
     expect(delivered).toEqual([id]);
     expect(store.state.pending.t1).toBeUndefined();
-    expect(store.thread("t1").open).toHaveLength(1);
+    expect(store.thread("t1").recent).toHaveLength(1);
   });
 
   it("keeps counting attempts of an undelivered note while the thread goes on", async () => {
@@ -98,6 +97,6 @@ describe("Daemon.tick", () => {
     expect(delivered[0]).toBe(delivered[1]);
     expect(store.state.pending.t1).toBeUndefined();
     expect(store.thread("t1").lastOrdinal).toBe(4);
-    expect(store.thread("t1").open).toHaveLength(1);
+    expect(store.thread("t1").recent).toHaveLength(1);
   });
 });

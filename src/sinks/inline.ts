@@ -7,11 +7,9 @@ import type { DeliverResult, Sink } from "./index.ts";
 export interface InlineSinkDeps {
   store: StateStore;
   watermarks(threadId: string): { run: number; item: number };
-  markUnread(threadId: string): Promise<boolean>;
-  log?: (msg: string) => void;
 }
 
-/** Queues the note for the UserPromptSubmit hook and puts T3's unread dot on the chat. */
+/** Queues the note for the UserPromptSubmit hook. */
 export class InlineSink implements Sink {
   private deps: InlineSinkDeps;
   constructor(deps: InlineSinkDeps) {
@@ -33,8 +31,6 @@ export class InlineSink implements Sink {
       });
       store.state.inbox[threadId] = inbox.slice(-MAX_INBOX_PER_THREAD);
     }
-    // The inbox is what counts; the dot is only a hint.
-    if (!(await this.deps.markUnread(threadId))) this.deps.log?.(`${threadId}: mark_unread failed (note still queued)`);
     return { delivered: true };
   }
 }

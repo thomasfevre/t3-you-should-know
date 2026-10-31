@@ -7,7 +7,7 @@ export interface Note {
   body: string;
 }
 
-/** Mirrors the limits of `t3_thread_notify`; longer output is treated as invalid. */
+/** Longer output is treated as invalid. */
 export const LIMITS = { learn: 500, title: 200, body: 20_000 } as const;
 
 export type ParseResult =

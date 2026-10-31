@@ -89,10 +89,9 @@ describe("runHook", () => {
 });
 
 describe("InlineSink", () => {
-  it("queues once per request id, caps the inbox, and survives a failed mark_unread", async () => {
+  it("queues once per request id and caps the inbox", async () => {
     const store = new StateStore("/nonexistent/dir/state.json");
-    const logs: string[] = [];
-    const sink = new InlineSink({ store, watermarks: () => ({ run: 7, item: 7_000_003 }), markUnread: async () => false, log: (m) => logs.push(m) });
+    const sink = new InlineSink({ store, watermarks: () => ({ run: 7, item: 7_000_003 }) });
     const n = { learn: "a", tag: "Heads up" as const, title: "T", body: "B" };
     expect((await sink.deliver("t1", "x", n, "r1")).delivered).toBe(true);
     await sink.deliver("t1", "x", n, "r1");
@@ -101,7 +100,6 @@ describe("InlineSink", () => {
     await sink.deliver("t1", "x", { ...n, learn: "b" }, "r2");
     await sink.deliver("t1", "x", { ...n, learn: "c" }, "r3");
     expect(store.state.inbox.t1.map((x) => x.learn)).toEqual(["b", "c"]);
-    expect(logs[0]).toContain("mark_unread failed");
   });
 });
 
@@ -111,7 +109,7 @@ describe("Daemon inbox reconcile", () => {
     store.save = () => {};
     store.state.lastSeenRunAt = "2026-10-31T00:00:00.000Z";
     store.state.inbox.t1 = [note()];
-    const full = { ...db, terminalRunsSince: () => [], resolutions: () => [] } as any;
+    const full = { ...db, terminalRunsSince: () => [] } as any;
     const logs: string[] = [];
     const d = new Daemon(full, {} as any, {} as any, defaults(), store, (m) => logs.push(m), () => new Date(now));
     return { d, store, logs };
@@ -155,7 +153,6 @@ describe("Daemon schema check", () => {
     const db = {
       schemaProblems: () => ["orchestration_v2_projection_runs.ordinal missing"],
       terminalRunsSince: () => { throw new Error("no such column: ordinal"); },
-      resolutions: () => [],
     } as any;
     const d = new Daemon(db, {} as any, {} as any, { ...defaults(), pollIntervalMs: 1 }, store, (m) => logs.push(m));
     const run = d.run();
@@ -212,7 +209,7 @@ describe("t3-ysk queue", () => {
     store.state.lastSeenRunAt = "2026-10-31T00:00:00.000Z";
     const got: string[] = [];
     const sink = { deliver: async (t: string, _ti: string, n: any) => { got.push(`${t}:${n.learn}`); return { delivered: true }; } };
-    const db = { terminalRunsSince: () => [], resolutions: () => [], getThread: () => ({ title: "T" }) } as any;
+    const db = { terminalRunsSince: () => [], getThread: () => ({ title: "T" }) } as any;
     const d = new Daemon(db, {} as any, sink as any, { ...defaults(), statePath }, store, () => {});
     enqueue(statePath, { threadId: "t1", note: { learn: "demo line", tag: "You should know", title: "x", body: "x" } });
     await d.tick();

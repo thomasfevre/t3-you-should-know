@@ -10,12 +10,10 @@ export interface Config {
   claudeBin: string;
   anthropicApiKey?: string;
   openrouterApiKey?: string;
-  /** `inline` works on stock T3 (hook + mark unread); `t3` needs the T3 patch. */
-  sink: "inline" | "t3" | "macos" | "stdout";
+  /** `inline`: shown by the agent on the next message (stock T3). `stdout`: print only. */
+  sink: "inline" | "stdout";
   /** Pilot allow-list: only these thread ids are analysed and shown. Unset = all threads. */
   onlyThreads?: string[];
-  /** Bearer token for the T3 MCP endpoint (see README). */
-  t3Token?: string;
   transcriptBudgetTokens: number;
   pollIntervalMs: number;
   /** Skip turns that added fewer than this many transcript items. */
@@ -56,6 +54,5 @@ export function loadConfig(path = CONFIG_PATH, env = process.env): Config {
   const cfg = { ...defaults(), ...file };
   cfg.anthropicApiKey ??= env.ANTHROPIC_API_KEY;
   cfg.openrouterApiKey ??= env.OPENROUTER_API_KEY;
-  cfg.t3Token ??= env.T3_YSK_TOKEN;
   return cfg;
 }

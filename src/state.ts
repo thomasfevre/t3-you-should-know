@@ -3,12 +3,6 @@ import { dirname } from "node:path";
 import type { InboxNote } from "./inline.ts";
 import type { Note } from "./parser.ts";
 
-export interface OpenNote {
-  learn: string;
-  /** Id returned by `t3_thread_notify`, when known. Preferred for matching. */
-  notificationId?: string;
-}
-
 export interface ThreadState {
   /** Last "learn:" lines offered on this thread, newest last, max 10. */
   recent: string[];
@@ -16,8 +10,6 @@ export interface ThreadState {
   /** Turns still to skip before asking again (backoff). */
   skipRemaining: number;
   lastNoteAt?: string;
-  /** Notes posted and not yet resolved by the user. */
-  open: OpenNote[];
   /** Highest item ordinal already analysed on this thread. */
   lastOrdinal: number;
 }
@@ -41,21 +33,18 @@ export interface State {
   /** Turns discovered but not yet analysed, by thread id. */
   pending: Record<string, PendingTurn>;
   threads: Record<string, ThreadState>;
-  /** Learn lines the user marked "Got it", global across threads. */
-  seen: string[];
   /** `inline` sink: notes waiting to be shown in their chat, by thread id. Read by the hook. */
   inbox: Record<string, InboxNote[]>;
 }
 
 export const MAX_RECENT = 10;
-export const MAX_SEEN = 50;
 
 export function emptyState(): State {
-  return { version: 1, pending: {}, threads: {}, seen: [], inbox: {} };
+  return { version: 1, pending: {}, threads: {}, inbox: {} };
 }
 
 export function emptyThread(): ThreadState {
-  return { recent: [], consecutiveMisses: 0, skipRemaining: 0, open: [], lastOrdinal: 0 };
+  return { recent: [], consecutiveMisses: 0, skipRemaining: 0, lastOrdinal: 0 };
 }
 
 export class StateStore {
@@ -80,24 +69,14 @@ export class StateStore {
     return (this.state.threads[id] ??= emptyThread());
   }
 
-  addRecent(id: string, learn: string, at: string, notificationId?: string) {
+  addRecent(id: string, learn: string, at: string) {
     const t = this.thread(id);
     t.recent = [...t.recent, learn].slice(-MAX_RECENT);
-    // Only the patched T3 resolves notes; keep the list bounded when nothing ever does.
-    t.open = [...t.open, { learn, notificationId }].slice(-MAX_RECENT);
     t.lastNoteAt = at;
     t.consecutiveMisses = 0;
     t.skipRemaining = 0;
   }
 
-  /** `acknowledged` feeds the avoid lists; other resolutions only close the note. */
-  resolve(id: string, note: OpenNote, resolution: "acknowledged" | "dismissed" | "asked") {
-    const t = this.thread(id);
-    t.open = t.open.filter((n) => n !== note);
-    if (resolution === "acknowledged" && !this.state.seen.includes(note.learn)) {
-      this.state.seen = [...this.state.seen, note.learn].slice(-MAX_SEEN);
-    }
-  }
 
   save() {
     mkdirSync(dirname(this.path), { recursive: true });
@@ -107,15 +86,3 @@ export class StateStore {
   }
 }
 
-/**
- * Find the open note a resolution row refers to. The notification id wins; the learn text is only
- * a fallback for notes posted without an id (or when T3 returned an id we cannot see in the rows).
- */
-export function matchOpenNote(
-  open: OpenNote[],
-  row: { itemId: string; payloadId?: string; summary: string },
-): OpenNote | undefined {
-  const byId = open.find((n) => n.notificationId && (n.notificationId === row.itemId || n.notificationId === row.payloadId));
-  if (byId) return byId;
-  return open.find((n) => !n.notificationId && n.learn === row.summary);
-}

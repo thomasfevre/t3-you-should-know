@@ -8,13 +8,12 @@ import { readDisabled, setEnabled } from "./toggle.ts";
 import { analyze, Daemon } from "./daemon.ts";
 import { makeSink } from "./sinks/index.ts";
 import { StateStore } from "./state.ts";
-import { readRuntime } from "./t3/runtime.ts";
 import { T3Sqlite } from "./t3/sqlite.ts";
 
-const USAGE = `t3-ysk run [--userdata <dir>]                  watch T3 and post notes (foreground)
-t3-ysk once --thread <id> [--sink stdout|macos|t3] [--userdata <dir>]
-                                            analyse one thread now; prints the note, or posts it with --sink t3
-t3-ysk status [--userdata <dir>]               show state, T3 server and recent threads
+const USAGE = `t3-ysk run [--userdata <dir>]                  watch T3 and queue notes (foreground)
+t3-ysk once --thread <id> [--sink stdout] [--userdata <dir>]
+                                            analyse one thread now and print the note
+t3-ysk status [--userdata <dir>]               show state, pending notes and recent threads
 t3-ysk queue --thread <id|latest> [--learn <text>]    hand a note to the running daemon now (demos): the given line,
                                             or what the model finds in the thread right now
 t3-ysk off|on [--thread <id>]                  turn notes off/on in a chat (default: the chat this runs in)
@@ -89,7 +88,7 @@ async function main() {
     console.error(`transcript: ${a.transcript.length} chars, model call ${a.ms} ms`);
     if (a.parsed.kind === "note") {
       const r = await sink.deliver(values.thread, thread.title, a.parsed.note, randomUUID());
-      console.error(r.delivered ? `delivered${r.notificationId ? ` (${r.notificationId})` : ""}` : "not delivered");
+      console.error(r.delivered ? "delivered" : "not delivered");
     } else console.log(a.parsed.kind === "none" ? "learn: none" : `invalid output (${a.parsed.reason}):\n${a.raw}`);
     // `once` never touches the state file; with --sink t3 it does post on the thread.
     return;
@@ -103,14 +102,12 @@ async function main() {
 }
 
 function status(cfg: ReturnType<typeof loadConfig>) {
-  const rt = readRuntime(cfg.userdataDir);
-  console.log(`T3 server: ${rt ? `${rt.origin} (pid ${rt.pid})` : "not running"}`);
   console.log(`backend: ${cfg.backend} / ${cfg.model}, sink: ${cfg.sink}`);
   const store = new StateStore(cfg.statePath);
   console.log(`state: ${cfg.statePath}`);
-  console.log(`watermark: ${store.state.lastSeenRunAt ?? "(never ran)"}, seen topics: ${store.state.seen.length}`);
+  console.log(`watermark: ${store.state.lastSeenRunAt ?? "(never ran)"}`);
   for (const [id, t] of Object.entries(store.state.threads)) {
-    console.log(`  ${id}: misses=${t.consecutiveMisses} skip=${t.skipRemaining} open=${t.open.length} recent=${t.recent.length}`);
+    console.log(`  ${id}: misses=${t.consecutiveMisses} skip=${t.skipRemaining} recent=${t.recent.length}`);
   }
   const off = readDisabled(cfg.statePath);
   if (off.size) console.log(`turned off in: ${[...off].join(", ")}`);

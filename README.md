@@ -67,7 +67,7 @@ t3-ysk queue --thread <id|latest> [--learn <text>]   # show a note on the next m
 | --- | --- |
 | `backend` | `claude-cli` (also `anthropic`, `openrouter`) |
 | `model` | `claude-haiku-5-5` |
-| `sink` | `inline` (also `macos`, `stdout`, and `t3` for the T3 patch below) |
+| `sink` | `inline` (also `stdout`: print only) |
 | `onlyThreads` | unset: all chats |
 | `minNewItems` / `minMinutesBetweenNotes` | `4` / `10` |
 | `transcriptBudgetTokens` | `12000` |
@@ -77,9 +77,9 @@ t3-ysk queue --thread <id|latest> [--learn <text>]   # show a note on the next m
 
 The `claude-cli` backend runs `claude -p` with no tools and no session persistence, in an empty temp directory.
 
-## The T3 patch (optional)
+## Why not a real UI
 
-A proper UI (a strip above the composer, "Got it" / "Ask in chat") needs a change in T3 itself, proposed in [pingdotgg/t3code#23383](https://github.com/pingdotgg/t3code/discussions/23383). With that patch, `sink: "t3"` posts through the MCP tool `t3_thread_notify` (token: `t3 auth session issue --subject mcp-client --scope orchestration:read --scope orchestration:operate --token-only`, in `t3Token`). Not needed for the default setup.
+A strip above the composer with "Got it" / "Ask in chat" buttons would need a change in T3 itself, proposed in [pingdotgg/t3code#23383](https://github.com/pingdotgg/t3code/discussions/23383). Until then, the agent shows the note.
 
 ## Tests
 

@@ -8,7 +8,7 @@ import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt.ts";
 import { takeQueued } from "./queue.ts";
 import { readDisabled } from "./toggle.ts";
 import type { Sink } from "./sinks/index.ts";
-import { matchOpenNote, type PendingTurn, type StateStore } from "./state.ts";
+import type { PendingTurn, StateStore } from "./state.ts";
 import type { T3Sqlite } from "./t3/sqlite.ts";
 import { buildTranscript, renderItem, type RawItem } from "./transcript.ts";
 
@@ -33,7 +33,6 @@ export async function analyze(
   const user = buildUserPrompt({
     transcript,
     recent: store.thread(threadId).recent,
-    seen: store.state.seen,
     language: cfg.language,
   });
   const t0 = Date.now();
@@ -117,8 +116,6 @@ export class Daemon {
   }
 
   async tick(): Promise<void> {
-    // Feedback first, so a "Got it" given since the last tick shapes this tick's prompts.
-    this.syncResolutions();
     this.reconcileInbox();
     this.discoverTurns();
     await this.deliverQueued();
@@ -206,7 +203,7 @@ export class Daemon {
     if (!res.delivered) throw new Error("note not delivered");
     const ts = this.store.thread(threadId);
     ts.lastOrdinal = Math.max(ts.lastOrdinal, pending.maxOrdinal ?? 0);
-    this.store.addRecent(threadId, note.learn, this.now().toISOString(), res.notificationId);
+    this.store.addRecent(threadId, note.learn, this.now().toISOString());
   }
 
   /** Notes handed over with `t3-ysk queue`: delivered now, no model call, no rate limit. */
@@ -214,7 +211,7 @@ export class Daemon {
     for (const q of takeQueued(this.cfg.statePath)) {
       const thread = this.db.getThread(q.threadId);
       const res = await this.sink.deliver(q.threadId, thread?.title ?? "", q.note, randomUUID());
-      if (res.delivered) this.store.addRecent(q.threadId, q.note.learn, this.now().toISOString(), res.notificationId);
+      if (res.delivered) this.store.addRecent(q.threadId, q.note.learn, this.now().toISOString());
       this.log(`${q.threadId}: queued note ${res.delivered ? "delivered" : "NOT delivered"}`);
     }
   }
@@ -244,17 +241,4 @@ export class Daemon {
     }
   }
 
-  /** Feedback loop: close open notes whose resolution has been set in T3. */
-  private syncResolutions(): void {
-    for (const [threadId, ts] of Object.entries(this.store.state.threads)) {
-      if (ts.open.length === 0) continue;
-      for (const r of this.db.resolutions(threadId)) {
-        const note = matchOpenNote(ts.open, r);
-        if (note) {
-          this.store.resolve(threadId, note, r.resolution as "acknowledged" | "dismissed" | "asked");
-          this.log(`${threadId}: note resolved as ${r.resolution}`);
-        }
-      }
-    }
-  }
 }

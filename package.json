@@ -1,17 +1,18 @@
 {
   "name": "t3-you-should-know",
   "version": "0.1.0",
-  "description": "A side agent that watches T3 Code threads and posts short 'you should know' notes.",
+  "description": "Shows a short 'You should know' note in T3 Code chats, on stock T3 (Claude Code and Codex).",
   "type": "module",
-  "bin": { "t3-ysk": "./bin/t3-ysk.mjs" },
-  "engines": { "node": ">=24" },
+  "bin": {
+    "t3-ysk": "./bin/t3-ysk.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "start": "node src/cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",

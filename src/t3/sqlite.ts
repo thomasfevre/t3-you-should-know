@@ -19,16 +19,6 @@ export interface RunRow {
   completedAt: string;
 }
 
-export interface Resolution {
-  /** `turn_item_id` of the notification row. */
-  itemId: string;
-  /** `id` field inside the payload, in case T3 uses a different id for the tool result. */
-  payloadId?: string;
-  threadId: string;
-  summary: string;
-  resolution: string;
-}
-
 const TERMINAL = ["completed", "failed", "interrupted", "cancelled"];
 
 /** Child threads T3 creates for subagents and delegated tasks; the user never opens them directly. */
@@ -151,24 +141,4 @@ export class T3Sqlite {
     return completedRunsAfter(this.db, threadId, runOrdinal);
   }
 
-  /**
-   * External notifications that carry a resolution. These only exist once the T3 patch
-   * (notification.source.kind = "external", `resolution` field) has landed; before that this is empty.
-   */
-  resolutions(threadId: string): Resolution[] {
-    const rows = this.db
-      .prepare(
-        `SELECT turn_item_id, thread_id, payload_json FROM orchestration_v2_projection_turn_items
-         WHERE thread_id = ? AND type = 'notification'`,
-      )
-      .all(threadId) as any[];
-    const out: Resolution[] = [];
-    for (const r of rows) {
-      const p = JSON.parse(r.payload_json);
-      if (p?.source?.kind === "external" && p.resolution) {
-        out.push({ itemId: r.turn_item_id, payloadId: p.id, threadId: r.thread_id, summary: p.summary, resolution: p.resolution });
-      }
-    }
-    return out;
-  }
 }
