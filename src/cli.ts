@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import { makeBackend } from "./backends/index.ts";
 import { loadConfig } from "./config.ts";
 import { hookMain } from "./hook.ts";
+import { readDisabled, setEnabled } from "./toggle.ts";
 import { analyze, Daemon } from "./daemon.ts";
 import { makeSink } from "./sinks/index.ts";
 import { StateStore } from "./state.ts";
@@ -13,6 +14,7 @@ const USAGE = `t3-ysk run [--userdata <dir>]                  watch T3 and post 
 t3-ysk once --thread <id> [--sink stdout|macos|t3] [--userdata <dir>]
                                             analyse one thread now; prints the note, or posts it with --sink t3
 t3-ysk status [--userdata <dir>]               show state, T3 server and recent threads
+t3-ysk off|on [--thread <id>]                  turn notes off/on in a chat (default: the chat this runs in)
 t3-ysk hook --provider claudeAgent|codex       UserPromptSubmit hook: hands queued notes to the agent (read-only)`;
 
 async function main() {
@@ -31,6 +33,13 @@ async function main() {
   // --userdata points at another T3 home, e.g. a dev instance. Runtime file and sqlite both follow it.
   if (values.userdata) cfg.userdataDir = values.userdata;
 
+  if (cmd === "off" || cmd === "on") {
+    const id = values.thread ?? process.env.T3CODE_THREAD_ID;
+    if (!id) throw new Error("no chat: run it from a T3 chat, or pass --thread <id>");
+    setEnabled(cfg.statePath, id, cmd === "on");
+    console.log(`You should know: ${cmd} for ${id}`);
+    return;
+  }
   if (cmd === "hook") return hookMain(cfg, values.provider ?? "");
   if (cmd === "status") return status(cfg);
   if (cmd !== "run" && cmd !== "once") {
@@ -74,6 +83,8 @@ function status(cfg: ReturnType<typeof loadConfig>) {
   for (const [id, t] of Object.entries(store.state.threads)) {
     console.log(`  ${id}: misses=${t.consecutiveMisses} skip=${t.skipRemaining} open=${t.open.length} recent=${t.recent.length}`);
   }
+  const off = readDisabled(cfg.statePath);
+  if (off.size) console.log(`turned off in: ${[...off].join(", ")}`);
   for (const [id, notes] of Object.entries(store.state.inbox)) console.log(`  inbox ${id}: ${notes.map((n) => n.learn).join(" | ")}`);
   const db = new T3Sqlite(cfg.userdataDir, cfg.includeSubagentThreads);
   const problems = db.schemaProblems();

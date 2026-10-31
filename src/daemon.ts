@@ -5,6 +5,7 @@ import type { Config } from "./config.ts";
 import { parseOutput, type ParseResult } from "./parser.ts";
 import { alreadyShown, EXPIRE_AFTER_DAYS, EXPIRE_AFTER_RUNS, type InlineDb } from "./inline.ts";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt.ts";
+import { readDisabled } from "./toggle.ts";
 import type { Sink } from "./sinks/index.ts";
 import { matchOpenNote, type PendingTurn, type StateStore } from "./state.ts";
 import type { T3Sqlite } from "./t3/sqlite.ts";
@@ -141,10 +142,12 @@ export class Daemon {
   /** Move the discovery cursor and queue the newest completed run of each thread. */
   private discoverTurns(): void {
     const runs = this.db.terminalRunsSince(this.store.state.lastSeenRunAt!);
+    const disabled = readDisabled(this.cfg.statePath);
     for (const r of runs) {
       this.store.state.lastSeenRunAt = r.completedAt;
       if (r.status !== "completed") continue;
       if (this.cfg.onlyThreads && !this.cfg.onlyThreads.includes(r.threadId)) continue;
+      if (disabled.has(r.threadId)) continue;
       const current = this.store.state.pending[r.threadId];
       // A note already produced for this thread still goes out, with its attempts so far; it is
       // not stale after one more turn. Only a turn with no note yet starts a fresh count.
@@ -208,8 +211,10 @@ export class Daemon {
   private reconcileInbox(): void {
     const db = this.db as unknown as Partial<InlineDb>;
     if (!db.assistantTextsAfter || !db.completedRunsAfter) return;
+    const disabled = readDisabled(this.cfg.statePath);
     for (const [threadId, notes] of Object.entries(this.store.state.inbox)) {
       const keep = notes.filter((n) => {
+        if (disabled.has(threadId)) return false;
         if (alreadyShown(db as InlineDb, threadId, n)) {
           this.log(`${threadId}: note shown in chat (${n.noteId})`);
           return false;

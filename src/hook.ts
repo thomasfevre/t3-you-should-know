@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import type { Config } from "./config.ts";
+import { readDisabled } from "./toggle.ts";
 import { alreadyShown, hookContext, type InboxNote, type InlineDb } from "./inline.ts";
 
 export type HookProvider = "claudeAgent" | "codex";
@@ -21,6 +22,10 @@ export interface HookInput {
   /** Daemon state file contents (JSON text). */
   state: string;
   cfg: Pick<Config, "onlyThreads">;
+  /** Threads the user turned notes off in. */
+  disabled?: Set<string>;
+  /** Shell command that turns notes off in this chat, shown to the agent. */
+  offCommand?: string;
 }
 
 /** Returns the hook's stdout, or null to print nothing. Never throws. */
@@ -30,6 +35,7 @@ export function runHook(input: HookInput): string | null {
     const threadId = input.env.T3CODE_THREAD_ID;
     if (!threadId) return null;
     if (input.cfg.onlyThreads && !input.cfg.onlyThreads.includes(threadId)) return null;
+    if (input.disabled?.has(threadId)) return null;
     const sessionId = JSON.parse(input.stdin)?.session_id;
     if (typeof sessionId !== "string" || !sessionId) return null;
     if (!input.db.bindingMatches(threadId, sessionId, input.provider)) return null;
@@ -39,7 +45,7 @@ export function runHook(input: HookInput): string | null {
     const notes = inbox.filter((n) => !alreadyShown(input.db, threadId, n));
     if (notes.length === 0) return null;
     return JSON.stringify({
-      hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: hookContext(notes) },
+      hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: hookContext(notes, input.offCommand) },
     });
   } catch {
     return null;
@@ -114,6 +120,7 @@ export function hookMain(cfg: Config, provider: string): void {
   } catch {
     return;
   }
-  const out = runHook({ env: process.env, stdin, provider, db, state, cfg });
+  const offCommand = `${process.execPath} ${process.argv[1]} off`;
+  const out = runHook({ env: process.env, stdin, provider, db, state, cfg, disabled: readDisabled(cfg.statePath), offCommand });
   if (out) process.stdout.write(out);
 }

@@ -34,6 +34,8 @@ Thread ids are in `orchestration_v2_projection_threads` of `~/.t3/userdata/state
 | `includeSubagentThreads` | `false` |
 | `sink` | `inline` (stock T3, see below; also `t3` with the T3 patch, `macos`, `stdout`) |
 | `onlyThreads` | unset (all threads); a list of thread ids for a pilot |
+
+Notes are on in every chat. `t3-ysk off` turns them off in the chat it runs in (the agent runs it when you ask; the hook gives it the exact command), `t3-ysk on` turns them back on. The list lives in `disabled-threads.json` next to the state file.
 | `transcriptBudgetTokens` | `12000` |
 | `minNewItems` / `minMinutesBetweenNotes` | `4` / `10` |
 | `language` | unset: follows the language the user writes in |

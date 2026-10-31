@@ -164,3 +164,23 @@ describe("Daemon schema check", () => {
     expect(logs.join("\n")).toContain("T3 FORMAT CHANGED, notes will not work: orchestration_v2_projection_runs.ordinal missing");
   });
 });
+
+describe("per-chat off switch", () => {
+  it("the hook stays silent in a chat turned off, and tells the agent how to turn it off elsewhere", () => {
+    expect(hook({ disabled: new Set(["t1"]) })).toBeNull();
+    const out = JSON.parse(hook({ offCommand: "node t3-ysk.mjs off" })!);
+    expect(out.hookSpecificOutput.additionalContext).toContain("run: node t3-ysk.mjs off");
+  });
+
+  it("setEnabled round-trips through the file", async () => {
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { readDisabled, setEnabled } = await import("../src/toggle.ts");
+    const state = join(mkdtempSync(join(tmpdir(), "ysk-")), "state.json");
+    setEnabled(state, "t1", false);
+    expect(readDisabled(state).has("t1")).toBe(true);
+    setEnabled(state, "t1", true);
+    expect(readDisabled(state).size).toBe(0);
+  });
+});
