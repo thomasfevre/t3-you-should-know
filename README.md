@@ -2,12 +2,32 @@
 
 A side agent for [T3 Code](https://t3.codes), modelled on Claude Code's built-in "You should know" plugin. When an agent turn finishes, a cheap model reads the thread and either stays silent (`learn: none`, the default) or posts one short note that explains something the user probably missed.
 
+## Set it up with your agent
+
+Paste this into Claude Code or Codex:
+
+```text
+Set up https://github.com/thomasfevre/t3-you-should-know on this Mac for my T3 Code.
+1. Clone it to ~/dev/t3-you-should-know, run `npm install` and `npm test`. It needs Node 24+.
+2. Read its README, section "Inline delivery on stock T3".
+3. Add the UserPromptSubmit hook to ~/.claude/settings.json (provider claudeAgent) and, if I use
+   Codex, to ~/.codex/hooks.json (provider codex). Use the absolute path of node and of
+   bin/t3-ysk.mjs. Keep my existing hooks, back up each file first, show me the diff before saving.
+4. Install a launchd agent that runs `node bin/t3-ysk.mjs run` at login, with KeepAlive, PATH
+   including the `claude` binary, logs in ~/.local/state/t3-you-should-know/daemon.log.
+5. Add one line to my global agent instructions: to turn the notes off in a chat, run
+   `node <path>/bin/t3-ysk.mjs off` (or `on`).
+6. Run `node bin/t3-ysk.mjs status` and tell me what it says. If I use Codex, remind me to approve
+   the new hook with /hooks in a terminal Codex session, then restart T3.
+Never write to ~/.t3/userdata: the tool only reads T3's database.
+```
+
 ## Install
 
 Needs Node 24+ (it runs TypeScript directly, no build step).
 
 ```sh
-git clone <this repo> && cd t3-you-should-know
+git clone https://github.com/thomasfevre/t3-you-should-know && cd t3-you-should-know
 npm install
 node bin/t3-ysk.mjs status      # or: npm link, then `t3-ysk status`
 ```
