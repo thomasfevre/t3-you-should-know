@@ -10,7 +10,10 @@ export interface Config {
   claudeBin: string;
   anthropicApiKey?: string;
   openrouterApiKey?: string;
-  sink: "t3" | "macos" | "stdout";
+  /** `inline` works on stock T3 (hook + mark unread); `t3` needs the T3 patch. */
+  sink: "inline" | "t3" | "macos" | "stdout";
+  /** Pilot allow-list: only these thread ids are analysed and shown. Unset = all threads. */
+  onlyThreads?: string[];
   /** Bearer token for the T3 MCP endpoint (see README). */
   t3Token?: string;
   transcriptBudgetTokens: number;
@@ -33,7 +36,7 @@ export function defaults(): Config {
     backend: "claude-cli",
     model: "claude-haiku-5-5",
     claudeBin: join(homedir(), ".local", "bin", "claude"),
-    sink: "t3",
+    sink: "inline",
     transcriptBudgetTokens: 12000,
     pollIntervalMs: 3000,
     minNewItems: 4,

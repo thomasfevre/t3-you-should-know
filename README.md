@@ -32,7 +32,8 @@ Thread ids are in `orchestration_v2_projection_threads` of `~/.t3/userdata/state
 | `model` | `claude-haiku-5-5` |
 | `userdataDir` | `~/.t3/userdata` (CLI: `--userdata <dir>`, e.g. a dev T3 home) |
 | `includeSubagentThreads` | `false` |
-| `sink` | `t3` (also `macos`, `stdout`) |
+| `sink` | `inline` (stock T3, see below; also `t3` with the T3 patch, `macos`, `stdout`) |
+| `onlyThreads` | unset (all threads); a list of thread ids for a pilot |
 | `transcriptBudgetTokens` | `12000` |
 | `minNewItems` / `minMinutesBetweenNotes` | `4` / `10` |
 | `language` | unset: follows the language the user writes in |
@@ -47,9 +48,29 @@ The `claude-cli` backend runs `claude -p` with no tools, no settings, no session
 - **Feedback**: notes resolved as `acknowledged` ("Got it") are added to the avoid list; the daemon reads them back from the thread, matching by the `notificationId` returned by `t3_thread_notify` (summary text only as a fallback).
 - `src/t3/ws.ts` (WebSocket RPC reader) is a documented stub; the sqlite poller makes it unnecessary.
 
+## Inline delivery on stock T3 (default)
+
+No T3 change needed. When a note is ready for a chat:
+
+1. the daemon queues it in its state file and puts T3's unread dot on that chat (stock MCP tool `t3_thread_organize`, needs `t3Token`; without it the note is still queued, just no dot);
+2. on your next message in that chat, a `UserPromptSubmit` hook hands the note to the agent, which starts its reply with `💡 You should know: …`;
+3. the daemon sees that line in the thread and drops the note. A note not shown after 3 completed runs or 7 days is dropped.
+
+The hook (`t3-ysk hook --provider claudeAgent|codex`) is read-only. It only acts in a process T3 spawned (`T3CODE_THREAD_ID` is set) and only when T3's database binds the hook's `session_id` to that thread for that provider; anything else prints nothing. It never re-injects a note already printed in the thread.
+
+Claude Code, in `~/.claude/settings.json` under `hooks.UserPromptSubmit`:
+
+```json
+{ "hooks": [{ "type": "command", "command": "t3-ysk hook --provider claudeAgent", "timeout": 2 }] }
+```
+
+Codex: the same command with `--provider codex` in the Codex hooks config (Codex asks you to trust a new hook once).
+
+The note shows up on your next message, not when you open the chat: stock T3 has no place to display it before that.
+
 ## Status of the T3 patch dependency
 
-`t3_thread_notify` and the notification `resolution` field do not exist in upstream T3 Code yet (a patch is in progress). Until it lands, the `t3` sink logs `not delivered (tool_missing | unauthorized)` once; the daemon retries a turn up to 3 times, then drops it. Use `--sink macos` or `sink: "macos"` to get native notifications in the meantime.
+`t3_thread_notify` and the notification `resolution` field do not exist in upstream T3 Code yet (a patch is in progress). Until it lands, the `t3` sink logs `not delivered (tool_missing | unauthorized)` once; the daemon retries a turn up to 3 times, then drops it. Use the default `inline` sink in the meantime.
 
 ## Tests
 

@@ -43,6 +43,18 @@ export class T3Mcp {
     return (await c.listTools()).tools.map((t) => t.name);
   }
 
+  /** Stock tool: put T3's unread dot on the thread. Returns false on any failure. */
+  async markUnread(threadId: string): Promise<boolean> {
+    try {
+      const c = await this.connect();
+      const res: any = await c.callTool({ name: "t3_thread_organize", arguments: { threadId, action: "mark_unread" } });
+      return !res.isError;
+    } catch {
+      this.client = null;
+      return false;
+    }
+  }
+
   /** Call `t3_thread_notify`. Absence of the tool (T3 patch not landed) is reported, not thrown. */
   async notify(args: NotifyArgs): Promise<NotifyResult> {
     try {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 import { makeBackend } from "./backends/index.ts";
 import { loadConfig } from "./config.ts";
+import { hookMain } from "./hook.ts";
 import { analyze, Daemon } from "./daemon.ts";
 import { makeSink } from "./sinks/index.ts";
 import { StateStore } from "./state.ts";
@@ -11,7 +12,8 @@ import { T3Sqlite } from "./t3/sqlite.ts";
 const USAGE = `t3-ysk run [--userdata <dir>]                  watch T3 and post notes (foreground)
 t3-ysk once --thread <id> [--sink stdout|macos|t3] [--userdata <dir>]
                                             analyse one thread now; prints the note, or posts it with --sink t3
-t3-ysk status [--userdata <dir>]               show state, T3 server and recent threads`;
+t3-ysk status [--userdata <dir>]               show state, T3 server and recent threads
+t3-ysk hook --provider claudeAgent|codex       UserPromptSubmit hook: hands queued notes to the agent (read-only)`;
 
 async function main() {
   const { positionals, values } = parseArgs({
@@ -21,6 +23,7 @@ async function main() {
       sink: { type: "string" },
       userdata: { type: "string" },
       "no-state": { type: "boolean" },
+      provider: { type: "string" },
     },
   });
   const cmd = positionals[0];
@@ -28,6 +31,7 @@ async function main() {
   // --userdata points at another T3 home, e.g. a dev instance. Runtime file and sqlite both follow it.
   if (values.userdata) cfg.userdataDir = values.userdata;
 
+  if (cmd === "hook") return hookMain(cfg, values.provider ?? "");
   if (cmd === "status") return status(cfg);
   if (cmd !== "run" && cmd !== "once") {
     console.log(USAGE);
@@ -53,7 +57,7 @@ async function main() {
     return;
   }
 
-  const sink = makeSink(cfg);
+  const sink = makeSink(cfg, cfg.sink, { store, db });
   const daemon = new Daemon(db, backend, sink, cfg, store);
   process.on("SIGINT", () => daemon.stop());
   process.on("SIGTERM", () => daemon.stop());
@@ -70,6 +74,7 @@ function status(cfg: ReturnType<typeof loadConfig>) {
   for (const [id, t] of Object.entries(store.state.threads)) {
     console.log(`  ${id}: misses=${t.consecutiveMisses} skip=${t.skipRemaining} open=${t.open.length} recent=${t.recent.length}`);
   }
+  for (const [id, notes] of Object.entries(store.state.inbox)) console.log(`  inbox ${id}: ${notes.map((n) => n.learn).join(" | ")}`);
   const db = new T3Sqlite(cfg.userdataDir, cfg.includeSubagentThreads);
   console.log("recent threads:");
   for (const t of db.recentThreads(5)) console.log(`  ${t.threadId}  ${t.title}`);

@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import type { InboxNote } from "./inline.ts";
 import type { Note } from "./parser.ts";
 
 export interface OpenNote {
@@ -42,13 +43,15 @@ export interface State {
   threads: Record<string, ThreadState>;
   /** Learn lines the user marked "Got it", global across threads. */
   seen: string[];
+  /** `inline` sink: notes waiting to be shown in their chat, by thread id. Read by the hook. */
+  inbox: Record<string, InboxNote[]>;
 }
 
 export const MAX_RECENT = 10;
 export const MAX_SEEN = 50;
 
 export function emptyState(): State {
-  return { version: 1, pending: {}, threads: {}, seen: [] };
+  return { version: 1, pending: {}, threads: {}, seen: [], inbox: {} };
 }
 
 export function emptyThread(): ThreadState {
@@ -80,7 +83,8 @@ export class StateStore {
   addRecent(id: string, learn: string, at: string, notificationId?: string) {
     const t = this.thread(id);
     t.recent = [...t.recent, learn].slice(-MAX_RECENT);
-    t.open = [...t.open, { learn, notificationId }];
+    // Only the patched T3 resolves notes; keep the list bounded when nothing ever does.
+    t.open = [...t.open, { learn, notificationId }].slice(-MAX_RECENT);
     t.lastNoteAt = at;
     t.consecutiveMisses = 0;
     t.skipRemaining = 0;

@@ -3,6 +3,7 @@ import type { Backend } from "./backends/index.ts";
 import { skipTurns } from "./backoff.ts";
 import type { Config } from "./config.ts";
 import { parseOutput, type ParseResult } from "./parser.ts";
+import { alreadyShown, EXPIRE_AFTER_DAYS, EXPIRE_AFTER_RUNS, type InlineDb } from "./inline.ts";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./prompt.ts";
 import type { Sink } from "./sinks/index.ts";
 import { matchOpenNote, type PendingTurn, type StateStore } from "./state.ts";
@@ -102,6 +103,7 @@ export class Daemon {
   async tick(): Promise<void> {
     // Feedback first, so a "Got it" given since the last tick shapes this tick's prompts.
     this.syncResolutions();
+    this.reconcileInbox();
     this.discoverTurns();
     this.store.save();
 
@@ -128,6 +130,7 @@ export class Daemon {
     for (const r of runs) {
       this.store.state.lastSeenRunAt = r.completedAt;
       if (r.status !== "completed") continue;
+      if (this.cfg.onlyThreads && !this.cfg.onlyThreads.includes(r.threadId)) continue;
       const current = this.store.state.pending[r.threadId];
       // A note already produced for this thread still goes out, with its attempts so far; it is
       // not stale after one more turn. Only a turn with no note yet starts a fresh count.
@@ -185,6 +188,29 @@ export class Daemon {
     const ts = this.store.thread(threadId);
     ts.lastOrdinal = Math.max(ts.lastOrdinal, pending.maxOrdinal ?? 0);
     this.store.addRecent(threadId, note.learn, this.now().toISOString(), res.notificationId);
+  }
+
+  /** `inline` sink: drop queued notes that are now in the thread, or that expired. */
+  private reconcileInbox(): void {
+    const db = this.db as unknown as Partial<InlineDb>;
+    if (!db.assistantTextsAfter || !db.completedRunsAfter) return;
+    for (const [threadId, notes] of Object.entries(this.store.state.inbox)) {
+      const keep = notes.filter((n) => {
+        if (alreadyShown(db as InlineDb, threadId, n)) {
+          this.log(`${threadId}: note shown in chat (${n.noteId})`);
+          return false;
+        }
+        const runs = db.completedRunsAfter!(threadId, n.runWatermark);
+        const days = (this.now().getTime() - Date.parse(n.createdAt)) / 86_400_000;
+        if (runs >= EXPIRE_AFTER_RUNS || days >= EXPIRE_AFTER_DAYS) {
+          this.log(`${threadId}: note expired unseen after ${runs} runs (${n.noteId})`);
+          return false;
+        }
+        return true;
+      });
+      if (keep.length) this.store.state.inbox[threadId] = keep;
+      else delete this.store.state.inbox[threadId];
+    }
   }
 
   /** Feedback loop: close open notes whose resolution has been set in T3. */

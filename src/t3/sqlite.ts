@@ -2,6 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import type { RawItem } from "../transcript.ts";
+import { assistantTextsAfter, completedRunsAfter } from "../hook.ts";
 
 export interface ThreadRow {
   threadId: string;
@@ -111,6 +112,23 @@ export class T3Sqlite {
       ordinal: r.ordinal,
       payload: JSON.parse(r.payload_json),
     }));
+  }
+
+  /** Watermarks for a note queued now: highest root run ordinal and highest turn-item ordinal. */
+  watermarks(threadId: string): { run: number; item: number } {
+    const run = this.db.prepare(`SELECT MAX(ordinal) AS m FROM orchestration_v2_projection_runs WHERE thread_id = ?`).get(threadId) as any;
+    const item = this.db
+      .prepare(`SELECT MAX(ordinal) AS m FROM orchestration_v2_projection_turn_items WHERE thread_id = ?`)
+      .get(threadId) as any;
+    return { run: Number(run?.m ?? 0), item: Number(item?.m ?? 0) };
+  }
+
+  assistantTextsAfter(threadId: string, itemOrdinal: number): string[] {
+    return assistantTextsAfter(this.db, threadId, itemOrdinal);
+  }
+
+  completedRunsAfter(threadId: string, runOrdinal: number): number {
+    return completedRunsAfter(this.db, threadId, runOrdinal);
   }
 
   /**
