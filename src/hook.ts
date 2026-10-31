@@ -12,6 +12,21 @@ export type HookProvider = "claudeAgent" | "codex";
 export interface HookDb extends InlineDb {
   /** True when T3 binds this native session of this provider to this app thread. */
   bindingMatches(threadId: string, nativeSessionId: string, provider: HookProvider): boolean;
+  /** The one app thread T3 binds this native session to, or null if none or several. */
+  threadForSession(nativeSessionId: string, provider: HookProvider): string | null;
+}
+
+/**
+ * Which T3 chat this hook call belongs to, or null.
+ * Claude: T3 starts one process per chat and sets T3CODE_THREAD_ID; the session must match it.
+ * Codex: T3 runs one shared app-server for every chat, so there is no per-chat env. The process must
+ * descend from T3 (T3CODE_CLI_PATH is set) and the session must map to exactly one chat.
+ */
+export function resolveThread(env: HookInput["env"], sessionId: string, provider: HookProvider, db: HookDb): string | null {
+  const fromEnv = env.T3CODE_THREAD_ID;
+  if (fromEnv) return db.bindingMatches(fromEnv, sessionId, provider) ? fromEnv : null;
+  if (provider === "codex" && env.T3CODE_CLI_PATH) return db.threadForSession(sessionId, provider);
+  return null;
 }
 
 export interface HookInput {
@@ -31,21 +46,21 @@ export interface HookInput {
 /** Returns the hook's stdout, or null to print nothing. Never throws. */
 export function runHook(input: HookInput): string | null {
   try {
-    // Only a provider process T3 spawned carries this. A terminal resume of the same session does not.
-    const threadId = input.env.T3CODE_THREAD_ID;
+    // Only a provider process T3 spawned carries the T3 env. A plain terminal does not.
+    if (!input.env.T3CODE_THREAD_ID && !input.env.T3CODE_CLI_PATH) return null;
+    const sessionId = JSON.parse(input.stdin)?.session_id;
+    if (typeof sessionId !== "string" || !sessionId) return null;
+    const threadId = resolveThread(input.env, sessionId, input.provider, input.db);
     if (!threadId) return null;
     if (input.cfg.onlyThreads && !input.cfg.onlyThreads.includes(threadId)) return null;
     if (input.disabled?.has(threadId)) return null;
-    const sessionId = JSON.parse(input.stdin)?.session_id;
-    if (typeof sessionId !== "string" || !sessionId) return null;
-    if (!input.db.bindingMatches(threadId, sessionId, input.provider)) return null;
 
     const inbox: InboxNote[] = JSON.parse(input.state)?.inbox?.[threadId] ?? [];
     // The daemon may not have reconciled yet: never re-inject a note already in the thread.
     const notes = inbox.filter((n) => !alreadyShown(input.db, threadId, n));
     if (notes.length === 0) return null;
     return JSON.stringify({
-      hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: hookContext(notes, input.offCommand) },
+      hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: hookContext(notes, input.offCommand && `${input.offCommand} --thread ${threadId}`) },
     });
   } catch {
     return null;
@@ -69,6 +84,17 @@ export class HookSqlite implements HookDb {
       )
       .get(threadId, nativeSessionId, provider);
     return !!r;
+  }
+
+  threadForSession(nativeSessionId: string, provider: HookProvider): string | null {
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT thread_id FROM orchestration_v2_projection_provider_threads
+         WHERE thread_id IS NOT NULL AND json_extract(payload_json, '$.nativeThreadRef.nativeId') = ?
+           AND COALESCE(driver, json_extract(payload_json, '$.driver')) = ?`,
+      )
+      .all(nativeSessionId, provider) as any[];
+    return rows.length === 1 ? String(rows[0].thread_id) : null;
   }
 
   assistantTextsAfter(threadId: string, itemOrdinal: number): string[] {

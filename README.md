@@ -67,7 +67,9 @@ Claude Code, in `~/.claude/settings.json` under `hooks.UserPromptSubmit`:
 { "hooks": [{ "type": "command", "command": "t3-ysk hook --provider claudeAgent", "timeout": 2 }] }
 ```
 
-Codex: the same command with `--provider codex` in the Codex hooks config (Codex asks you to trust a new hook once).
+Codex: the same command with `--provider codex` in `~/.codex/hooks.json` (Codex asks you to trust a new hook once). T3 runs one shared Codex app-server for all chats, so there is no per-chat env: the hook requires `T3CODE_CLI_PATH` (the process descends from T3) and a session that maps to exactly one chat.
+
+To run the daemon at login, use a launchd agent (`~/Library/LaunchAgents/…plist` with `RunAtLoad` and `KeepAlive`, running `node bin/t3-ysk.mjs run`, `PATH` including the `claude` binary).
 
 The note shows up on your next message, not when you open the chat: stock T3 has no place to display it before that.
 

@@ -34,7 +34,12 @@ async function main() {
   if (values.userdata) cfg.userdataDir = values.userdata;
 
   if (cmd === "off" || cmd === "on") {
-    const id = values.thread ?? process.env.T3CODE_THREAD_ID;
+    let id = values.thread ?? process.env.T3CODE_THREAD_ID;
+    // In a T3 Codex chat there is no T3 thread env; Codex exposes its own session id instead.
+    if (!id && process.env.CODEX_THREAD_ID) {
+      const { HookSqlite } = await import("./hook.ts");
+      id = new HookSqlite(cfg.userdataDir).threadForSession(process.env.CODEX_THREAD_ID, "codex") ?? undefined;
+    }
     if (!id) throw new Error("no chat: run it from a T3 chat, or pass --thread <id>");
     setEnabled(cfg.statePath, id, cmd === "on");
     console.log(`You should know: ${cmd} for ${id}`);

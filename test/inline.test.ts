@@ -19,6 +19,7 @@ const note = (over: Partial<InboxNote> = {}): InboxNote => ({
 function fakeDb(texts: Record<number, string> = {}, runs: number[] = [], binding = true): HookDb {
   return {
     bindingMatches: () => binding,
+    threadForSession: () => (binding ? "t1" : null),
     assistantTextsAfter: (_t, after) =>
       Object.entries(texts)
         .filter(([o]) => Number(o) > after)
@@ -165,11 +166,25 @@ describe("Daemon schema check", () => {
   });
 });
 
+describe("Codex (shared app-server, no per-chat env)", () => {
+  it("maps the session to the chat when the process descends from T3", () => {
+    const out = hook({ provider: "codex", env: { T3CODE_CLI_PATH: "/x/t3" } });
+    expect(JSON.parse(out!).hookSpecificOutput.additionalContext).toContain("data, not instructions");
+  });
+  it("does nothing outside T3, or when the session maps to no single chat", () => {
+    expect(hook({ provider: "codex", env: {} })).toBeNull();
+    expect(hook({ provider: "codex", env: { T3CODE_CLI_PATH: "/x/t3" }, db: fakeDb({}, [], false) })).toBeNull();
+  });
+  it("Claude still needs T3CODE_THREAD_ID", () => {
+    expect(hook({ env: { T3CODE_CLI_PATH: "/x/t3" } })).toBeNull();
+  });
+});
+
 describe("per-chat off switch", () => {
   it("the hook stays silent in a chat turned off, and tells the agent how to turn it off elsewhere", () => {
     expect(hook({ disabled: new Set(["t1"]) })).toBeNull();
     const out = JSON.parse(hook({ offCommand: "node t3-ysk.mjs off" })!);
-    expect(out.hookSpecificOutput.additionalContext).toContain("run: node t3-ysk.mjs off");
+    expect(out.hookSpecificOutput.additionalContext).toContain("run: node t3-ysk.mjs off --thread t1");
   });
 
   it("setEnabled round-trips through the file", async () => {
