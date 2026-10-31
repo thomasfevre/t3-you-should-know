@@ -15,7 +15,7 @@ const USAGE = `t3-ysk run [--userdata <dir>]                  watch T3 and post 
 t3-ysk once --thread <id> [--sink stdout|macos|t3] [--userdata <dir>]
                                             analyse one thread now; prints the note, or posts it with --sink t3
 t3-ysk status [--userdata <dir>]               show state, T3 server and recent threads
-t3-ysk queue --thread <id> [--learn <text>]    hand a note to the running daemon now (demos): the given line,
+t3-ysk queue --thread <id|latest> [--learn <text>]    hand a note to the running daemon now (demos): the given line,
                                             or what the model finds in the thread right now
 t3-ysk off|on [--thread <id>]                  turn notes off/on in a chat (default: the chat this runs in)
 t3-ysk hook --provider claudeAgent|codex       UserPromptSubmit hook: hands queued notes to the agent (read-only)`;
@@ -50,7 +50,10 @@ async function main() {
     return;
   }
   if (cmd === "queue") {
-    if (!values.thread) throw new Error("--thread <id> is required");
+    if (!values.thread) throw new Error("--thread <id|latest> is required");
+    // "latest": the chat that moved last, i.e. the one you are recording in.
+    if (values.thread === "latest") values.thread = new T3Sqlite(cfg.userdataDir).recentThreads(1)[0]?.threadId;
+    if (!values.thread) throw new Error("no recent chat found");
     let note;
     if (values.learn) note = { learn: values.learn, tag: "You should know" as const, title: values.learn, body: values.learn };
     else {
