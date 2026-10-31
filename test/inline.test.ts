@@ -221,3 +221,10 @@ describe("t3-ysk queue", () => {
     expect(store.thread("t1").recent).toEqual(["demo line"]);
   });
 });
+
+describe("isShownIn with rewording", () => {
+  it("counts a lightly reworded note as shown", () => {
+    const learn = "Chaque tour terminé de tous vos chats T3 part vers un modèle externe, même quand aucune note n'apparaît.";
+    expect(isShownIn("💡 You should know: chaque tour terminé de tous tes chats T3 part vers un modèle externe, même quand aucune note n'apparaît.", learn)).toBe(true);
+  });
+});

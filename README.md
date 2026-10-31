@@ -1,6 +1,10 @@
 # t3-you-should-know
 
-A side agent for [T3 Code](https://t3.codes), modelled on Claude Code's built-in "You should know" plugin. When an agent turn finishes, a cheap model reads the thread and either stays silent (`learn: none`, the default) or posts one short note that explains something the user probably missed.
+A "You should know" helper for [T3 Code](https://t3.codes), after Claude Code's built-in plugin. After each agent turn, a small model reads the chat. Most of the time it stays silent. When the user probably missed something (a skipped test, a forgotten file, a risky default), the agent opens its next reply with one line about it.
+
+![The note at the top of the agent's reply](docs/img/inline.png)
+
+Works on stock T3 Code, in Claude Code and Codex chats. No fork.
 
 ## Set it up with your agent
 
@@ -9,7 +13,7 @@ Paste this into Claude Code or Codex:
 ```text
 Set up https://github.com/thomasfevre/t3-you-should-know on this Mac for my T3 Code.
 1. Clone it to ~/dev/t3-you-should-know, run `npm install` and `npm test`. It needs Node 24+.
-2. Read its README, section "Inline delivery on stock T3".
+2. Read its README.
 3. Add the UserPromptSubmit hook to ~/.claude/settings.json (provider claudeAgent) and, if I use
    Codex, to ~/.codex/hooks.json (provider codex). Use the absolute path of node and of
    bin/t3-ysk.mjs. Keep my existing hooks, back up each file first, show me the diff before saving.
@@ -22,25 +26,38 @@ Set up https://github.com/thomasfevre/t3-you-should-know on this Mac for my T3 C
 Never write to ~/.t3/userdata: the tool only reads T3's database.
 ```
 
-## Install
+## How it works
 
-Needs Node 24+ (it runs TypeScript directly, no build step).
+1. A daemon reads T3's local database (`~/.t3/userdata/statev2.sqlite`, read-only). When a turn finishes, it sends the recent transcript to a small model (Claude Haiku through your `claude` CLI by default), which answers `learn: none` or one note.
+2. The note waits in the daemon's state file.
+3. On your next message in that chat, a `UserPromptSubmit` hook gives the note to the agent, which starts its reply with `💡 You should know: …`.
+4. The daemon sees that line in the chat and drops the note. A note not shown after 3 turns or 7 days is dropped.
 
-```sh
-git clone https://github.com/thomasfevre/t3-you-should-know && cd t3-you-should-know
-npm install
-node bin/t3-ysk.mjs status      # or: npm link, then `t3-ysk status`
+Limits:
+- The note arrives with your next message, not when you open the chat. Stock T3 has no other place to show it.
+- It goes through the agent, as quoted data. If the point is already handled, the agent says so.
+- It reads T3's internal tables. If an update changes them, the log says `T3 FORMAT CHANGED` and notes stop.
+- Turns are sent to the model you configure. Short turns, turns within 10 minutes of a note, and threads where it keeps finding nothing are skipped.
+
+The hook is read-only and acts only in a process T3 started, for a session T3 binds to that chat. Claude chats get `T3CODE_THREAD_ID` from T3. Codex runs one shared process for all chats, so the hook finds the chat from the Codex session id.
+
+Hook entry (Claude: `~/.claude/settings.json`, Codex: `~/.codex/hooks.json`, under `UserPromptSubmit`):
+
+```json
+{ "hooks": [{ "type": "command", "command": "/path/to/node /path/to/bin/t3-ysk.mjs hook --provider claudeAgent", "timeout": 2 }] }
 ```
 
-## Use
+## Commands
 
 ```sh
-t3-ysk once --thread <thread-id> --sink stdout   # dry run on one thread, prints the model output
-t3-ysk run                                       # watch T3 and post notes
-t3-ysk status
+t3-ysk run                                  # the daemon
+t3-ysk status                               # state, pending notes, T3 format check
+t3-ysk off | on                             # notes off/on in the chat this runs in (on by default)
+t3-ysk once --thread <id> --sink stdout     # dry run on one chat
+t3-ysk queue --thread <id|latest> [--learn <text>]   # show a note on the next message (demos)
 ```
 
-Thread ids are in `orchestration_v2_projection_threads` of `~/.t3/userdata/statev2.sqlite`, or `t3-ysk status` lists the latest ones.
+`t3-ysk` is `node bin/t3-ysk.mjs` (or `npm link`).
 
 ## Config
 
@@ -50,63 +67,22 @@ Thread ids are in `orchestration_v2_projection_threads` of `~/.t3/userdata/state
 | --- | --- |
 | `backend` | `claude-cli` (also `anthropic`, `openrouter`) |
 | `model` | `claude-haiku-5-5` |
-| `userdataDir` | `~/.t3/userdata` (CLI: `--userdata <dir>`, e.g. a dev T3 home) |
-| `includeSubagentThreads` | `false` |
-| `sink` | `inline` (stock T3, see below; also `t3` with the T3 patch, `macos`, `stdout`) |
-| `onlyThreads` | unset (all threads); a list of thread ids for a pilot |
-
-Notes are on in every chat. `t3-ysk off` turns them off in the chat it runs in (the agent runs it when you ask; the hook gives it the exact command), `t3-ysk on` turns them back on. The list lives in `disabled-threads.json` next to the state file.
-| `transcriptBudgetTokens` | `12000` |
+| `sink` | `inline` (also `macos`, `stdout`, and `t3` for the T3 patch below) |
+| `onlyThreads` | unset: all chats |
 | `minNewItems` / `minMinutesBetweenNotes` | `4` / `10` |
-| `language` | unset: follows the language the user writes in |
-| `anthropicApiKey`, `openrouterApiKey`, `t3Token` | env `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `T3_YSK_TOKEN` |
+| `transcriptBudgetTokens` | `12000` |
+| `language` | unset: follows the chat |
+| `userdataDir` | `~/.t3/userdata` |
+| `anthropicApiKey`, `openrouterApiKey` | env `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` |
 
-The `claude-cli` backend runs `claude -p` with no tools, no settings, no session persistence, in an empty temp directory, so it uses your Claude subscription and leaves no trace in your project history.
+The `claude-cli` backend runs `claude -p` with no tools and no session persistence, in an empty temp directory.
 
-## How it talks to T3
+## The T3 patch (optional)
 
-- **Reading** (default): the local SQLite database `~/.t3/userdata/statev2.sqlite`, opened read-only. A run that reaches `completed` in `orchestration_v2_projection_runs` triggers an analysis; the transcript comes from `orchestration_v2_projection_turn_items`. Nothing is ever written to T3's data.
-- **Posting**: the `t3` sink calls the MCP tool `t3_thread_notify` on `<origin>/mcp` (origin from `server-runtime.json`). The endpoint needs a bearer token: `t3 auth session issue --subject mcp-client --scope orchestration:read --scope orchestration:operate --ttl 30d --token-only`, then put it in `t3Token` (or `T3_YSK_TOKEN`). The `--subject mcp-client` part matters: the `/mcp` endpoint only accepts sessions issued for that subject, a session for the default subject is rejected with 401. Issuing a session writes to T3's own auth store, which is why this tool does not do it for you.
-- **Feedback**: notes resolved as `acknowledged` ("Got it") are added to the avoid list; the daemon reads them back from the thread, matching by the `notificationId` returned by `t3_thread_notify` (summary text only as a fallback).
-- `src/t3/ws.ts` (WebSocket RPC reader) is a documented stub; the sqlite poller makes it unnecessary.
-
-## Inline delivery on stock T3 (default)
-
-No T3 change needed. When a note is ready for a chat:
-
-1. the daemon queues it in its state file and puts T3's unread dot on that chat (stock MCP tool `t3_thread_organize`, needs `t3Token`; without it the note is still queued, just no dot);
-2. on your next message in that chat, a `UserPromptSubmit` hook hands the note to the agent, which starts its reply with `💡 You should know: …`;
-   T3 refuses `mark_unread` from an outside client on full-access threads (`runtime_mode_escalation_denied`), so in practice there is no dot; leave `t3Token` unset.
-3. the daemon sees that line in the thread and drops the note. A note not shown after 3 completed runs or 7 days is dropped.
-
-The hook (`t3-ysk hook --provider claudeAgent|codex`) is read-only. It only acts in a process T3 spawned (`T3CODE_THREAD_ID` is set) and only when T3's database binds the hook's `session_id` to that thread for that provider; anything else prints nothing. It never re-injects a note already printed in the thread.
-
-Claude Code, in `~/.claude/settings.json` under `hooks.UserPromptSubmit`:
-
-```json
-{ "hooks": [{ "type": "command", "command": "t3-ysk hook --provider claudeAgent", "timeout": 2 }] }
-```
-
-Codex: the same command with `--provider codex` in `~/.codex/hooks.json` (Codex asks you to trust a new hook once). T3 runs one shared Codex app-server for all chats, so there is no per-chat env: the hook requires `T3CODE_CLI_PATH` (the process descends from T3) and a session that maps to exactly one chat.
-
-To run the daemon at login, use a launchd agent (`~/Library/LaunchAgents/…plist` with `RunAtLoad` and `KeepAlive`, running `node bin/t3-ysk.mjs run`, `PATH` including the `claude` binary).
-
-The note shows up on your next message, not when you open the chat: stock T3 has no place to display it before that.
-
-## Status of the T3 patch dependency
-
-`t3_thread_notify` and the notification `resolution` field do not exist in upstream T3 Code yet (a patch is in progress). Until it lands, the `t3` sink logs `not delivered (tool_missing | unauthorized)` once; the daemon retries a turn up to 3 times, then drops it. Use the default `inline` sink in the meantime.
+A proper UI (a strip above the composer, "Got it" / "Ask in chat") needs a change in T3 itself, proposed in [pingdotgg/t3code#23383](https://github.com/pingdotgg/t3code/discussions/23383). With that patch, `sink: "t3"` posts through the MCP tool `t3_thread_notify` (token: `t3 auth session issue --subject mcp-client --scope orchestration:read --scope orchestration:operate --token-only`, in `t3Token`). Not needed for the default setup.
 
 ## Tests
 
 ```sh
 npm test && npm run typecheck
 ```
-
-## What it looks like
-
-The note sits above the composer of the thread it concerns. Click the line to read the explanation.
-
-![Strip above the composer](docs/img/strip.png)
-
-![Expanded note](docs/img/expanded.png)

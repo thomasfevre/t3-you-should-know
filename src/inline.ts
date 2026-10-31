@@ -40,8 +40,11 @@ export function isShownIn(text: string, learn: string): boolean {
   const t = norm(text);
   const at = t.indexOf(norm(INLINE_MARKER));
   if (at < 0) return false;
-  const head = norm(learn).slice(0, 40);
-  return head.length > 0 && t.slice(at).includes(head);
+  // Agents reword (tense, "your" -> "you"), so match most of the note's longer words, not the exact text.
+  const after = t.slice(at, at + 600);
+  const words = [...new Set(norm(learn).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 3))];
+  if (words.length === 0) return false;
+  return words.filter((w) => after.includes(w)).length / words.length >= 0.6;
 }
 
 export function alreadyShown(db: InlineDb, threadId: string, note: InboxNote): boolean {
