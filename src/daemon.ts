@@ -9,7 +9,7 @@ import { takeQueued } from "./queue.ts";
 import { readDisabled } from "./toggle.ts";
 import type { Sink } from "./sinks/index.ts";
 import type { PendingTurn, StateStore } from "./state.ts";
-import type { T3Sqlite } from "./t3/sqlite.ts";
+import type { SourceDb as T3Sqlite } from "./sources.ts";
 import { buildTranscript, renderItem, type RawItem } from "./transcript.ts";
 
 export interface Analysis {

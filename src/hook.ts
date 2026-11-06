@@ -1,5 +1,6 @@
 // `t3-ysk hook --provider claudeAgent|codex`: UserPromptSubmit hook for Claude Code and Codex.
 // Read-only on both T3's database and the daemon state. Any doubt -> prints nothing, exits 0.
+import { BbSqlite } from "./bb/sqlite.ts";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
@@ -23,6 +24,8 @@ export interface HookDb extends InlineDb {
  * descend from T3 (T3CODE_CLI_PATH is set) and the session must map to exactly one chat.
  */
 export function resolveThread(env: HookInput["env"], sessionId: string, provider: HookProvider, db: HookDb): string | null {
+  if (env.BB_THREAD_ID) return db.bindingMatches(`bb:${env.BB_THREAD_ID}`, sessionId, provider) ? `bb:${env.BB_THREAD_ID}` : null;
+  if (env.BB_CLI) return db.threadForSession(sessionId, provider);
   const fromEnv = env.T3CODE_THREAD_ID;
   if (fromEnv) return db.bindingMatches(fromEnv, sessionId, provider) ? fromEnv : null;
   if (provider === "codex" && env.T3CODE_CLI_PATH) return db.threadForSession(sessionId, provider);
@@ -47,7 +50,7 @@ export interface HookInput {
 export function runHook(input: HookInput): string | null {
   try {
     // Only a provider process T3 spawned carries the T3 env. A plain terminal does not.
-    if (!input.env.T3CODE_THREAD_ID && !input.env.T3CODE_CLI_PATH) return null;
+    if (!input.env.T3CODE_THREAD_ID && !input.env.T3CODE_CLI_PATH && !input.env.BB_THREAD_ID && !input.env.BB_CLI) return null;
     const sessionId = JSON.parse(input.stdin)?.session_id;
     if (typeof sessionId !== "string" || !sessionId) return null;
     const threadId = resolveThread(input.env, sessionId, input.provider, input.db);
@@ -129,7 +132,7 @@ export function completedRunsAfter(db: DatabaseSync, threadId: string, runOrdina
 export function hookMain(cfg: Config, provider: string): void {
   if (provider !== "claudeAgent" && provider !== "codex") return;
   // Installed globally, so it runs for every prompt: outside T3, exit before reading anything.
-  if (!process.env.T3CODE_THREAD_ID && !process.env.T3CODE_CLI_PATH) return;
+  if (!process.env.T3CODE_THREAD_ID && !process.env.T3CODE_CLI_PATH && !process.env.BB_THREAD_ID && !process.env.BB_CLI) return;
   let stdin = "";
   try {
     stdin = readFileSync(0, "utf8");
@@ -142,9 +145,11 @@ export function hookMain(cfg: Config, provider: string): void {
   } catch {
     return; // daemon never ran: nothing to show
   }
-  let db: HookSqlite;
+  const bb = !!(process.env.BB_THREAD_ID || process.env.BB_CLI);
+  if (!cfg.sources.includes(bb ? "bb" : "t3")) return;
+  let db: HookDb;
   try {
-    db = new HookSqlite(cfg.userdataDir);
+    db = bb ? new BbSqlite(cfg.bbDbPath) : new HookSqlite(cfg.userdataDir);
   } catch {
     return;
   }

@@ -1,7 +1,7 @@
 import type { Config } from "../config.ts";
 import type { Note } from "../parser.ts";
 import type { StateStore } from "../state.ts";
-import type { T3Sqlite } from "../t3/sqlite.ts";
+import type { SourceDb as T3Sqlite } from "../sources.ts";
 import { InlineSink } from "./inline.ts";
 import { StdoutSink } from "./stdout.ts";
 
