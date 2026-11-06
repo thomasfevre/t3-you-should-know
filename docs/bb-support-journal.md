@@ -1,3 +1,0 @@
-# Implementation journal
-
-2026-11-06: Created feat/bb-support from origin/master in /Users/toma/dev/t3-ysk-bb. Inspected installed BB bundles, a filtered runtime environment and BB SQLite schema/events read-only. Implemented BB reader, source facade, checked hook resolution, CLI routing and configuration. Preserved legacy T3 state keys and reserved bb: keys for BB. Added fixture coverage including ambiguous identities and disabled hooks. Validation: 46 tests passed; TypeScript and git diff checks passed. Read-only status against local databases displayed BB threads. No model calls, settings changes, daemon restart, installation or BB writes. Live BB note delivery remains a user-run verification after installation.
