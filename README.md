@@ -94,3 +94,9 @@ A strip above the composer with "Got it" / "Ask in chat" buttons would need a ch
 ```sh
 npm test && npm run typecheck
 ```
+
+## BB chats
+
+BB is also supported through read-only access to `~/.bb/bb.db`. Both sources are enabled by default; set `"sources": ["t3"]` to keep analysis limited to T3. `bbDbPath` can override the BB database path. BB commands use `--thread bb:<BB_THREAD_ID>`; `off` and `on` also recognize BB's process environment. The same globally installed provider hook handles both apps.
+
+See [BB findings and verification](docs/bb-support.md) for the identity checks, schema, limitations and reload commands. No BB files are written.

@@ -8,7 +8,7 @@ import { readDisabled, setEnabled } from "./toggle.ts";
 import { analyze, Daemon } from "./daemon.ts";
 import { makeSink } from "./sinks/index.ts";
 import { StateStore } from "./state.ts";
-import { T3Sqlite } from "./t3/sqlite.ts";
+import { Sources } from "./sources.ts";
 
 const USAGE = `t3-ysk run [--userdata <dir>]                  watch T3 and queue notes (foreground)
 t3-ysk once --thread <id> [--sink stdout] [--userdata <dir>]
@@ -37,11 +37,12 @@ async function main() {
   if (values.userdata) cfg.userdataDir = values.userdata;
 
   if (cmd === "off" || cmd === "on") {
-    let id = values.thread ?? process.env.T3CODE_THREAD_ID;
+    let id = values.thread ?? (process.env.BB_THREAD_ID ? `bb:${process.env.BB_THREAD_ID}` : process.env.T3CODE_THREAD_ID);
     // In a T3 Codex chat there is no T3 thread env; Codex exposes its own session id instead.
     if (!id && process.env.CODEX_THREAD_ID) {
       const { HookSqlite } = await import("./hook.ts");
-      id = new HookSqlite(cfg.userdataDir).threadForSession(process.env.CODEX_THREAD_ID, "codex") ?? undefined;
+      const { BbSqlite } = await import("./bb/sqlite.ts");
+      id = (process.env.BB_CLI ? new BbSqlite(cfg.bbDbPath) : new HookSqlite(cfg.userdataDir)).threadForSession(process.env.CODEX_THREAD_ID, "codex") ?? undefined;
     }
     if (!id) throw new Error("no chat: run it from a T3 chat, or pass --thread <id>");
     setEnabled(cfg.statePath, id, cmd === "on");
@@ -51,12 +52,12 @@ async function main() {
   if (cmd === "queue") {
     if (!values.thread) throw new Error("--thread <id|latest> is required");
     // "latest": the chat that moved last, i.e. the one you are recording in.
-    if (values.thread === "latest") values.thread = new T3Sqlite(cfg.userdataDir).recentThreads(1)[0]?.threadId;
+    if (values.thread === "latest") values.thread = new Sources(cfg).recentThreads(1)[0]?.threadId;
     if (!values.thread) throw new Error("no recent chat found");
     let note;
     if (values.learn) note = { learn: values.learn, tag: "You should know" as const, title: values.learn, body: values.learn };
     else {
-      const db = new T3Sqlite(cfg.userdataDir, true);
+      const db = new Sources(cfg);
       const a = await analyze(db, makeBackend(cfg), cfg, new StateStore(cfg.statePath), values.thread);
       if (a.parsed.kind !== "note") {
         console.log(`model found nothing to say (${a.parsed.kind}); pass --learn "<text>" to queue your own line`);
@@ -75,7 +76,7 @@ async function main() {
     process.exit(cmd ? 1 : 0);
   }
 
-  const db = new T3Sqlite(cfg.userdataDir, cfg.includeSubagentThreads);
+  const db = new Sources(cfg);
   const store = new StateStore(cfg.statePath);
   const backend = makeBackend(cfg);
 
@@ -112,9 +113,9 @@ function status(cfg: ReturnType<typeof loadConfig>) {
   const off = readDisabled(cfg.statePath);
   if (off.size) console.log(`turned off in: ${[...off].join(", ")}`);
   for (const [id, notes] of Object.entries(store.state.inbox)) console.log(`  inbox ${id}: ${notes.map((n) => n.learn).join(" | ")}`);
-  const db = new T3Sqlite(cfg.userdataDir, cfg.includeSubagentThreads);
+  const db = new Sources(cfg);
   const problems = db.schemaProblems();
-  console.log(problems.length ? `T3 FORMAT CHANGED: ${problems.join("; ")}` : "T3 format: ok");
+  console.log(problems.length ? `SOURCE FORMAT CHANGED: ${problems.join("; ")}` : "source formats: ok");
   console.log("recent threads:");
   for (const t of db.recentThreads(5)) console.log(`  ${t.threadId}  ${t.title}`);
 }

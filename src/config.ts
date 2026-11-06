@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 export interface Config {
   userdataDir: string;
+  bbDbPath: string;
+  sources: ("t3" | "bb")[];
   backend: "claude-cli" | "anthropic" | "openrouter";
   model: string;
   /** Path of the `claude` binary for the claude-cli backend. */
@@ -30,6 +32,8 @@ export const CONFIG_PATH = join(homedir(), ".config", "t3-you-should-know", "con
 
 export function defaults(): Config {
   return {
+    sources: ["t3", "bb"],
+    bbDbPath: join(homedir(), ".bb", "bb.db"),
     userdataDir: join(homedir(), ".t3", "userdata"),
     backend: "claude-cli",
     model: "claude-haiku-5-5",
